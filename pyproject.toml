@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "crypto-futures-signal-bot"
+version = "1.0.0"
+description = "Independent crypto futures analytics and signal generator"
+requires-python = ">=3.12"
+dependencies = [
+    "python-dotenv>=1.0.1,<2",
+    "pydantic>=2.6,<3",
+    "pandas>=2.2,<3",
+    "numpy>=1.26,<3",
+    "ccxt>=4.3,<5",
+    "aiogram>=3.10,<4",
+    "SQLAlchemy>=2.0,<3",
+    "aiosqlite>=0.19,<1",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.0,<9", "pytest-asyncio>=0.23,<1"]
+
+[tool.setuptools.packages.find]
+include = ["app*", "tests*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-ra"
