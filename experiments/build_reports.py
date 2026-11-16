@@ -52,6 +52,10 @@ def main() -> None:
         "All figures are historical simulations with fees, slippage and funding included. "
         "No production parameter was changed for this analysis.",
         "",
+        "This is a fresh 150-day fetch, so the trade count (489) differs slightly from the earlier "
+        "validation report (504) because the live data window moved forward. Both samples cover the "
+        "same 12 symbols and 15M timeframe; neither was selected to improve results.",
+        "",
         "## 1. Overall",
         "",
     ]
@@ -109,7 +113,10 @@ def main() -> None:
         "The experiment waits for the NEXT closed 5M bar, re-runs the same filter, and enters at "
         "the following bar open if the verdict becomes CONFIRMED/STRONG. No historical outcome is rewritten.",
         "",
-        "## Next-bar recheck",
+        "## Original outcomes grouped by next-bar verdict (descriptive only)",
+        "",
+        "These are the ORIGINAL trade results, split by what the next-bar recheck would have decided. "
+        "They are not the simulated results after waiting.",
         "",
     ]
     lines += table(METRIC_HEADERS, [metric_row(k, v) for k, v in sorted(ee["verdict_after_next_bar"].items())])
@@ -121,8 +128,13 @@ def main() -> None:
         f"- Approved after next bar: **{delay['approved_after_next_bar']}/{delay['n']}**",
         f"- Average entry shift: **{f(delay['avg_entry_shift_atr'], 4)} ATR**",
         f"- Average shift when approved: **{f(delay['avg_entry_shift_atr_when_approved'], 4)} ATR**",
-        f"- Original expectancy: **{f(delay['original_expectancy'], 4)} R**",
-        f"- Projected expectancy if waited: **{f(delay['projected_expectancy_if_waited'], 4)} R**",
+        f"- Original expectancy of all EARLY trades: **{f(delay['original_expectancy'], 4)} R**",
+        f"- Original expectancy of the 34 later-approved subset: **{f(delay['approved_original_expectancy'], 4)} R**",
+        f"- Projected expectancy of those 34 after waiting (entry slippage included): "
+        f"**{f(delay['approved_projected_expectancy'], 4)} R**",
+        f"- Original expectancy of the 137 skipped ideas: **{f(delay['skipped_original_expectancy'], 4)} R**",
+        f"- Average expectancy across all EARLY ideas with skipped ideas counted as 0: "
+        f"**{f(delay['projected_expectancy_if_waited'], 4)} R**",
         f"- Losses avoided by waiting: **{delay['avoided_losses']}**",
         f"- New losses created by waiting: **{delay['new_losses_after_wait']}**",
         "",
@@ -134,9 +146,10 @@ def main() -> None:
         "",
         "## Conclusion",
         "",
-        "Wait-for-confirmation is only useful if the projected expectancy gain outweighs the entry "
-        "slippage and the number of newly missed winners. See docs/STRATEGY_EXPERIMENTS.md variant V6 "
-        "for the full comparison including OOS and bootstrap intervals.",
+        "The gain comes mainly from NOT entering the 137 ideas that failed the next-bar recheck "
+        "(their original expectancy was negative), not from a better entry price: the 34 approved "
+        "ideas lost roughly 0.35 R to waiting slippage. Only 34/171 trades remained, so this is a "
+        "hypothesis, not proof. See docs/STRATEGY_EXPERIMENTS.md variant V6 for OOS and bootstrap intervals.",
         "",
     ]
     Path("docs/EARLY_ENTRY_ANALYSIS.md").write_text("\n".join(lines), encoding="utf-8")
@@ -153,22 +166,20 @@ def main() -> None:
         "",
         "## Feature comparison: winners vs losers",
         "",
-        table(
-            ["Feature", "Winners", "Losers"],
-            [
-                ["N", fb["winners"]["n"], fb["losers"]["n"]],
-                ["Expectancy R", f(fb["winners"]["metrics"]["expectancy_r"], 4), f(fb["losers"]["metrics"]["expectancy_r"], 4)],
-                ["Avg relative volume", f(fb["winners"]["avg_volume"], 3), f(fb["losers"]["avg_volume"], 3)],
-                ["Avg ATR%", f(fb["winners"]["avg_atr_pct"], 5), f(fb["losers"]["avg_atr_pct"], 5)],
-                ["Avg entry extension (ATR)", f(fb["winners"]["avg_extension"], 3), f(fb["losers"]["avg_extension"], 3)],
-                ["Avg holding bars", f(fb["winners"]["avg_holding"], 2), f(fb["losers"]["avg_holding"], 2)],
-                ["Avg confirmation score", f(fb["winners"]["avg_score"], 2), f(fb["losers"]["avg_score"], 2)],
-            ],
-        ),
-        "",
-        "## Rejection reason frequency",
-        "",
     ]
+    lines += table(
+        ["Feature", "Winners", "Losers"],
+        [
+            ["N", fb["winners"]["n"], fb["losers"]["n"]],
+            ["Expectancy R", f(fb["winners"]["metrics"]["expectancy_r"], 4), f(fb["losers"]["metrics"]["expectancy_r"], 4)],
+            ["Avg relative volume", f(fb["winners"]["avg_volume"], 3), f(fb["losers"]["avg_volume"], 3)],
+            ["Avg ATR%", f(fb["winners"]["avg_atr_pct"], 5), f(fb["losers"]["avg_atr_pct"], 5)],
+            ["Avg entry extension (ATR)", f(fb["winners"]["avg_extension"], 3), f(fb["losers"]["avg_extension"], 3)],
+            ["Avg holding bars", f(fb["winners"]["avg_holding"], 2), f(fb["losers"]["avg_holding"], 2)],
+            ["Avg confirmation score", f(fb["winners"]["avg_score"], 2), f(fb["losers"]["avg_score"], 2)],
+        ],
+    )
+    lines += ["", "## Rejection reason frequency", ""]
     lines += table(["Reason", "Count"], [[k, v] for k, v in sorted(fb["reason_frequency"].items(), key=lambda x: -x[1])])
     lines += [
         "",
@@ -230,28 +241,33 @@ def main() -> None:
         "Variants are pre-defined hypotheses. None was tuned to maximise this historical win rate. "
         "No production file, threshold or weight was changed.",
         "",
+        "Fresh 150-day sample (489 base trades) — see docs/SIGNAL_DIAGNOSTICS.md. "
+        "No experimental variant was merged into production.",
+        "",
         "## Variant comparison",
         "",
-        table(
-            ["Variant", "N", "WR %", "PF", "E[R]", "MaxDD", "OOS E[R]", "CI low", "CI high", "Decision"],
+    ]
+    lines += table(
+        ["Variant", "N", "WR %", "PF", "E[R]", "MaxDD", "OOS E[R]", "CI low", "CI high", "Decision"],
+        [
             [
-                [
-                    name, res["metrics"]["trades"], f(res["metrics"]["win_rate"]),
-                    f(res["metrics"]["profit_factor"], 3), f(res["metrics"]["expectancy_r"], 4),
-                    f(res["metrics"]["max_drawdown_r"], 3),
-                    f(res["splits"].get("out_of_sample", {}).get("expectancy_r"), 4),
-                    f(res["bootstrap_expectancy"]["ci_low"], 4),
-                    f(res["bootstrap_expectancy"]["ci_high"], 4),
-                    "IMPROVED" if (
-                        res["metrics"]["expectancy_r"] > experiments["V0_baseline_current"]["metrics"]["expectancy_r"]
-                        and res["metrics"]["max_drawdown_r"] > experiments["V0_baseline_current"]["metrics"]["max_drawdown_r"]
-                        and res["bootstrap_expectancy"]["ci_low"] > 0
-                        and res["splits"].get("out_of_sample", {}).get("expectancy_r", 0) > 0
-                    ) else "NOT PROVEN",
-                ]
-                for name, res in experiments.items()
-            ],
-        ),
+                name, res["metrics"]["trades"], f(res["metrics"]["win_rate"]),
+                f(res["metrics"]["profit_factor"], 3), f(res["metrics"]["expectancy_r"], 4),
+                f(res["metrics"]["max_drawdown_r"], 3),
+                f(res["splits"].get("out_of_sample", {}).get("expectancy_r"), 4),
+                f(res["bootstrap_expectancy"]["ci_low"], 4),
+                f(res["bootstrap_expectancy"]["ci_high"], 4),
+                "IMPROVED" if (
+                    res["metrics"]["expectancy_r"] > experiments["V0_baseline_current"]["metrics"]["expectancy_r"]
+                    and res["metrics"]["max_drawdown_r"] > experiments["V0_baseline_current"]["metrics"]["max_drawdown_r"]
+                    and res["bootstrap_expectancy"]["ci_low"] > 0
+                    and res["splits"].get("out_of_sample", {}).get("expectancy_r", 0) > 0
+                ) else "NOT PROVEN",
+            ]
+            for name, res in experiments.items()
+        ],
+    )
+    lines += [
         "",
         "## Success criteria (all required)",
         "",

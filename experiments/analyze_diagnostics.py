@@ -72,6 +72,8 @@ def main() -> None:
 
     early = [r for r in rows if r["verdict"] == "EARLY ENTRY"]
     early_groups = group_by(early, "next_bar_verdict")
+    approved_early = [r for r in early if r.get("next_bar_approved")]
+    skipped_early = [r for r in early if not r.get("next_bar_approved")]
     early_missing: dict[str, list[dict]] = {}
     for row in early:
         for reason in row["reject_reasons"]:
@@ -108,6 +110,11 @@ def main() -> None:
                 "avg_entry_shift_atr": avg(early, "entry_shift_atr"),
                 "avg_entry_shift_atr_when_approved": avg([r for r in early if r.get("next_bar_approved")], "entry_shift_atr"),
                 "original_expectancy": metrics(early)["expectancy_r"],
+                "approved_original_expectancy": metrics(approved_early)["expectancy_r"],
+                "approved_projected_expectancy": round(
+                    sum(r.get("projected_r", 0) for r in approved_early) / len(approved_early), 4
+                ) if approved_early else 0.0,
+                "skipped_original_expectancy": metrics(skipped_early)["expectancy_r"],
                 "projected_expectancy_if_waited": round(
                     sum(r.get("projected_r", 0) for r in early) / len(early), 4
                 ) if early else 0.0,
