@@ -133,6 +133,9 @@ class SignalTracker:
                     update.events.append("TP1")
 
             if update.highest_tp and sl_touched:
+                # Partial target was hit first; the remaining position is closed
+                # by the (possibly breakeven) stop. Outcome records the partial.
+                update.outcome = {1: "TP1", 2: "TP2", 3: "TP3"}[update.highest_tp]
                 update.closed_at = candle.timestamp
                 update.realized_r = round(update.gross_r - fee_r, 4)
                 return update

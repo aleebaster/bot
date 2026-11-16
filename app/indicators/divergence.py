@@ -62,20 +62,20 @@ def find_pivots(series: pd.Series, order: int = 3, mode: str = "high") -> list[t
     return pivots
 
 
-def analyze_rsi(frame: pd.DataFrame, timeframe: str = "") -> RSIState:
-    """Classify the current RSI state from closed candles."""
-    close = frame["close"].astype(float)
-    r7, r14, r21 = rsi(close, 7), rsi(close, 14), rsi(close, 21)
-    valid14 = r14.dropna()
-    valid7 = r7.dropna()
-    value = float(valid14.iloc[-1]) if not valid14.empty else None
-    v7 = float(valid7.iloc[-1]) if not valid7.empty else None
-    v21_series = r21.dropna()
-    v21 = float(v21_series.iloc[-1]) if not v21_series.empty else None
+def rsi_state_at(rsi7: pd.Series, rsi14: pd.Series, rsi21: pd.Series, i: int) -> RSIState:
+    """Build an RSIState at index i from precomputed (causal) RSI series."""
 
-    prev14 = float(valid14.iloc[-2]) if len(valid14) >= 2 else value
+    def at(series: pd.Series, idx: int) -> float | None:
+        if 0 <= idx < len(series) and not pd.isna(series.iloc[idx]):
+            return float(series.iloc[idx])
+        return None
+
+    value = at(rsi14, i)
+    v7 = at(rsi7, i)
+    v21 = at(rsi21, i)
+    prev = at(rsi14, i - 1)
     value_or_zero = value if value is not None else 50.0
-    prev_or_zero = prev14 if prev14 is not None else 50.0
+    prev_or_zero = prev if prev is not None else 50.0
 
     return RSIState(
         value=value,
@@ -90,6 +90,12 @@ def analyze_rsi(frame: pd.DataFrame, timeframe: str = "") -> RSIState:
         exit_oversold=prev_or_zero < 30 <= value_or_zero,
         exit_overbought=prev_or_zero > 70 >= value_or_zero,
     )
+
+
+def analyze_rsi(frame: pd.DataFrame, timeframe: str = "") -> RSIState:
+    """Classify the current RSI state from closed candles."""
+    close = frame["close"].astype(float)
+    return rsi_state_at(rsi(close, 7), rsi(close, 14), rsi(close, 21), len(frame) - 1)
 
 
 def detect_divergences(

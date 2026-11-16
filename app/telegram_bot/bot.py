@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -45,6 +46,11 @@ class BotContext:
     paused: bool = False
 
 
+async def _resolve(value):
+    """Accept sync or async service callables in handlers."""
+    return await value if inspect.isawaitable(value) else value
+
+
 def create_dispatcher(context: BotContext) -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
 
@@ -57,7 +63,7 @@ def create_dispatcher(context: BotContext) -> Dispatcher:
 
     @dp.message(Command("status"))
     async def status_handler(message: Message) -> None:
-        status = context.get_status()
+        status = await _resolve(context.get_status())
         status["paused"] = context.paused
         status["paper_trading"] = context.settings.paper_trading
         status["max_concurrent_ideas"] = context.settings.max_concurrent_ideas
@@ -70,7 +76,7 @@ def create_dispatcher(context: BotContext) -> Dispatcher:
 
     @dp.message(Command("signals"))
     async def signals_handler(message: Message) -> None:
-        recent = context.recent_signals()
+        recent = await _resolve(context.recent_signals())
         if not recent:
             await message.answer("No signals recorded yet.")
             return
@@ -84,13 +90,13 @@ def create_dispatcher(context: BotContext) -> Dispatcher:
 
     @dp.message(Command("top"))
     async def top_handler(message: Message) -> None:
-        symbols = context.get_top_symbols()
+        symbols = await _resolve(context.get_top_symbols())
         await message.answer("🏆 Top liquid symbols:\n" + (", ".join(symbols) if symbols else "unavailable"))
 
     @dp.message(Command("btc", "eth"))
     async def quick_coin_handler(message: Message) -> None:
         symbol = "BTCUSDT" if message.text and "/btc" in message.text.lower() else "ETHUSDT"
-        result = context.analyze_symbol(symbol)
+        result = await _resolve(context.analyze_symbol(symbol))
         await _send_analysis(message, symbol, result)
 
     @dp.message(Command("coin"))
@@ -100,11 +106,11 @@ def create_dispatcher(context: BotContext) -> Dispatcher:
             await message.answer("Usage: /coin BTCUSDT")
             return
         symbol = raw if raw.endswith("USDT") else f"{raw}USDT"
-        await _send_analysis(message, symbol, context.analyze_symbol(symbol))
+        await _send_analysis(message, symbol, await _resolve(context.analyze_symbol(symbol)))
 
     @dp.message(Command("stats", "performance"))
     async def stats_handler(message: Message) -> None:
-        await message.answer(format_stats(context.get_stats()))
+        await message.answer(format_stats(await _resolve(context.get_stats())))
 
     @dp.message(Command("watchlist"))
     async def watchlist_handler(message: Message, command: CommandObject) -> None:

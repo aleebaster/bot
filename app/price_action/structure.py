@@ -73,13 +73,17 @@ def find_swings(candles: list[Candle], order: int = 2) -> tuple[list[Swing], lis
 
 
 def classify_swings(swings: list[Swing]) -> list[str]:
-    """Label transitions as HH/HL/LH/LL relative to the previous swing."""
+    """Label each swing HH/HL/LH/LL relative to the previous swing of same kind."""
     labels: list[str] = []
-    for prev, cur in zip(swings, swings[1:]):
-        if cur.price > prev.price:
-            labels.append("HH" if cur.kind == "high" else "HL")
+    last_high: float | None = None
+    last_low: float | None = None
+    for swing in swings:
+        if swing.kind == "high":
+            labels.append("" if last_high is None else ("HH" if swing.price > last_high else "LH"))
+            last_high = swing.price
         else:
-            labels.append("LH" if cur.kind == "high" else "LL")
+            labels.append("" if last_low is None else ("HL" if swing.price > last_low else "LL"))
+            last_low = swing.price
     return labels
 
 
