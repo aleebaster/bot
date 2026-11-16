@@ -102,12 +102,13 @@ class ExchangeClient:
     ) -> list[Candle]:
         """Fetch OHLCV bars and flag the still-forming bar as not closed."""
         limit = limit or self.settings.ohlcv_limit
+        # Use keywords: ccxt signature is (symbol, timeframe, since, limit, params).
         rows = await self._retry(
             self.exchange.fetch_ohlcv,
             self.ccxt_symbol(symbol),
             timeframe,
-            limit,
-            since,
+            since=since,
+            limit=limit,
         )
         step = timeframe_to_ms(timeframe)
         now = self.now_ms

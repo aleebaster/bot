@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
 from app.market_data.models import Candle, candles_to_frame, frame_to_candles, is_valid_candle, timeframe_to_ms
 from app.market_data.store import CandleStore
 from tests.factories import BASE_TS, make_candles
@@ -60,3 +62,25 @@ def test_freshness() -> None:
     assert not store.is_fresh("BTCUSDT", "1m", 60)
     store.upsert("BTCUSDT", "1m", Candle(int(time.time() * 1000), 1, 1, 1, 1, 1))
     assert store.is_fresh("BTCUSDT", "1m", 60)
+
+
+@pytest.mark.asyncio
+async def test_fetch_ohlcv_uses_since_and_limit_keywords() -> None:
+    """Regression: ccxt signature is (symbol, timeframe, since, limit)."""
+    from app.config import Settings
+    from app.market_data.exchange import ExchangeClient
+
+    captured: dict = {}
+
+    class FakeExchange:
+        async def fetch_ohlcv(self, symbol, timeframe, since=None, limit=None, params=None):
+            captured.update(symbol=symbol, timeframe=timeframe, since=since, limit=limit)
+            return [[BASE_TS, 100, 101, 99, 100, 10]]
+
+    client = ExchangeClient(Settings())
+    client.exchange = FakeExchange()
+    candles = await client.fetch_ohlcv("BTCUSDT", "1m", limit=7, since=BASE_TS)
+    assert captured["limit"] == 7
+    assert captured["since"] == BASE_TS
+    assert captured["symbol"] == "BTC/USDT:USDT"
+    assert len(candles) == 1
