@@ -191,13 +191,23 @@ def format_scan_summary(total: int, signals: int, no_trade: int) -> str:
 
 
 def format_stats(stats: dict) -> str:
-    return (
-        "📈 PERFORMANCE\n"
-        f"Total signals: {stats.get('total_signals', 0)}\n"
-        f"Win rate: {stats.get('win_rate', 0):.1f}%\n"
-        f"Loss rate: {stats.get('loss_rate', 0):.1f}%\n"
-        f"Profit factor: {stats.get('profit_factor', 0):.2f}\n"
-        f"Expectancy: {stats.get('expectancy_r', 0):.2f}R\n"
-        f"Average R: {stats.get('average_r', 0):.2f}\n"
-        f"Max drawdown: {stats.get('max_drawdown_r', 0):.2f}R"
-    )
+    lines = [
+        "📈 PERFORMANCE",
+        f"Total signals: {stats.get('total_signals', 0)}",
+        f"Win rate: {stats.get('win_rate', 0):.1f}%",
+        f"Loss rate: {stats.get('loss_rate', 0):.1f}%",
+        f"Profit factor: {stats.get('profit_factor', 0):.2f}",
+        f"Expectancy: {stats.get('expectancy_r', 0):.2f}R",
+        f"Average R: {stats.get('average_r', 0):.2f}",
+        f"Max drawdown: {stats.get('max_drawdown_r', 0):.2f}R",
+        f"Rejected ideas: {stats.get('total_rejections', 0)}",
+        f"False breakout rate: {stats.get('false_breakout_rate', 0):.1f}%",
+        f"Liquidity trap rate: {stats.get('liquidity_trap_rate', 0):.1f}%",
+        "By entry status:",
+    ]
+    for status, data in (stats.get("by_confirmation_status") or {}).items():
+        lines.append(
+            f"  {status}: {data.get('signals', 0)} signals, WR {data.get('win_rate', 0):.1f}%, "
+            f"expectancy {data.get('expectancy_r', 0):.2f}R"
+        )
+    return "\n".join(lines)

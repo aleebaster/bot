@@ -48,7 +48,9 @@ def build_services(settings: Settings) -> tuple[ScanScheduler, PaperTradingEngin
 
 def make_bot_context(settings: Settings, scheduler: ScanScheduler, paper: PaperTradingEngine, notifier: TelegramNotifier) -> BotContext:
     async def stats_provider() -> dict:
-        return compute_statistics(await paper.signals.all_records())
+        return compute_statistics(
+            await paper.signals.all_records(), await paper.signals.all_rejections()
+        )
 
     async def recent() -> list[dict]:
         records = await paper.signals.list_recent(10)
@@ -113,7 +115,8 @@ async def stats(settings: Settings) -> None:
     db = DatabaseManager(settings.database_url)
     await db.init()
     try:
-        report = compute_statistics(await SignalRepository(db).all_records())
+        repo = SignalRepository(db)
+        report = compute_statistics(await repo.all_records(), await repo.all_rejections())
         for key, value in report.items():
             print(f"{key}: {value}")
     finally:

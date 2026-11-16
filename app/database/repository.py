@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 
 from app.database.manager import DatabaseManager
-from app.database.models import DailyReport, PaperPosition, SignalRecord
+from app.database.models import DailyReport, PaperPosition, RejectionRecord, SignalRecord
 from app.signal_engine.models import Signal
 from app.database.tracking import TrackingUpdate
 
@@ -60,6 +60,13 @@ class SignalRepository:
             estimated_cost=signal.plan.estimated_cost,
             expiration=signal.expiration,
             status=signal.status,
+            confirmation_score=float((signal.confirmation or {}).get("confirmation_score", 0.0)),
+            false_signal_risk=int((signal.confirmation or {}).get("false_signal_risk", 0)),
+            confirmation_status=signal.confirmation_status,
+            confirmation_reasons=json.dumps((signal.confirmation or {}).get("reasons_confirm", [])),
+            rejection_reasons=json.dumps((signal.confirmation or {}).get("reasons_reject", [])),
+            entry_location=(signal.confirmation or {}).get("entry_location", ""),
+            countertrend=int(signal.countertrend),
             outcome="OPEN",
             created_at=now,
             updated_at=now,
@@ -87,6 +94,26 @@ class SignalRepository:
                 )
             )
             await session.commit()
+
+    async def log_rejection(self, symbol: str, direction: str, data: dict) -> None:
+        """Persist a filtered idea so rejection frequency can be measured."""
+        async with self.db.session() as session:
+            session.add(
+                RejectionRecord(
+                    symbol=symbol,
+                    direction=direction,
+                    timestamp=data.get("timestamp") or int(time.time() * 1000),
+                    verdict=data.get("verdict", "NO TRADE"),
+                    false_signal_risk=int(data.get("false_signal_risk", 0)),
+                    reasons=json.dumps(data.get("reasons_reject", [])),
+                )
+            )
+            await session.commit()
+
+    async def all_rejections(self) -> list[RejectionRecord]:
+        async with self.db.session() as session:
+            result = await session.execute(select(RejectionRecord))
+            return list(result.scalars().all())
 
     async def list_recent(self, limit: int = 20) -> list[SignalRecord]:
         async with self.db.session() as session:

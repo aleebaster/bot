@@ -48,8 +48,28 @@ class SignalRecord(Base):
     mae: Mapped[float] = mapped_column(Float, default=0.0)
     fees: Mapped[float] = mapped_column(Float, default=0.0)
     highest_tp: Mapped[int] = mapped_column(Integer, default=0)
+    confirmation_score: Mapped[float] = mapped_column(Float, default=0.0)
+    false_signal_risk: Mapped[int] = mapped_column(Integer, default=0)
+    confirmation_status: Mapped[str] = mapped_column(String(32), default="")
+    confirmation_reasons: Mapped[str] = mapped_column(Text, default="[]")
+    rejection_reasons: Mapped[str] = mapped_column(Text, default="[]")
+    entry_location: Mapped[str] = mapped_column(String(32), default="")
+    countertrend: Mapped[bool] = mapped_column(Integer, default=0)
+    recheck_status: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class RejectionRecord(Base):
+    __tablename__ = "rejections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    symbol: Mapped[str] = mapped_column(String(20), index=True)
+    direction: Mapped[str] = mapped_column(String(10))
+    timestamp: Mapped[int] = mapped_column(Integer, index=True)
+    verdict: Mapped[str] = mapped_column(String(32))
+    false_signal_risk: Mapped[int] = mapped_column(Integer, default=0)
+    reasons: Mapped[str] = mapped_column(Text, default="[]")
 
 
 class PaperPosition(Base):

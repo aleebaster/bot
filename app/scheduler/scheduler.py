@@ -114,6 +114,9 @@ class ScanScheduler:
                 if rejection:
                     from app.false_signal.engine import format_rejected_from_dict
 
+                    await self.paper.signals.log_rejection(
+                        symbol, str(result.diagnostics.get("direction", "")), rejection
+                    )
                     await self.notifier.send(
                         format_rejected_from_dict(
                             symbol, str(result.diagnostics.get("direction", "")), rejection

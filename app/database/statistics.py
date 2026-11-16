@@ -11,11 +11,25 @@ from app.database.tracking import CLOSED_OUTCOMES
 
 def _summary(items: list[SignalRecord]) -> dict[str, float | int]:
     wins = [r for r in items if r.realized_r > 0]
+    losses = [r for r in items if r.realized_r < 0]
+    gross_profit = sum(r.realized_r for r in wins)
+    gross_loss = abs(sum(r.realized_r for r in losses))
+    pf = gross_profit / gross_loss if gross_loss > 0 else (float("inf") if gross_profit > 0 else 0.0)
+    equity = peak = 0.0
+    max_dd = 0.0
+    for record in sorted(items, key=lambda r: r.updated_at or r.timestamp):
+        equity += record.realized_r
+        peak = max(peak, equity)
+        max_dd = min(max_dd, equity - peak)
     return {
         "signals": len(items),
         "wins": len(wins),
+        "losses": len(losses),
         "win_rate": round(100 * len(wins) / len(items), 2) if items else 0.0,
         "average_r": round(sum(r.realized_r for r in items) / len(items), 3) if items else 0.0,
+        "expectancy_r": round(sum(r.realized_r for r in items) / len(items), 3) if items else 0.0,
+        "profit_factor": round(pf, 3) if pf != float("inf") else float("inf"),
+        "max_drawdown_r": round(max_dd, 3),
     }
 
 
@@ -28,7 +42,19 @@ def _group_stats(
     return {key: _summary(items) for key, items in groups.items()}
 
 
-def compute_statistics(records: list[SignalRecord]) -> dict[str, Any]:
+def _risk_band(score: int) -> str:
+    if score <= 20:
+        return "Low"
+    if score <= 40:
+        return "Moderate"
+    if score <= 60:
+        return "Elevated"
+    if score <= 80:
+        return "High"
+    return "Very High"
+
+
+def compute_statistics(records: list[SignalRecord], rejections: list | None = None) -> dict[str, Any]:
     """Aggregate all stored signals. No missing data is fabricated."""
     closed = [r for r in records if r.outcome in CLOSED_OUTCOMES]
     wins = [r for r in closed if r.realized_r > 0]
@@ -75,4 +101,31 @@ def compute_statistics(records: list[SignalRecord]) -> dict[str, Any]:
         "by_symbol": _group_stats(closed, "symbol"),
         "by_timeframe": _group_stats(closed, "setup_timeframe"),
         "by_trigger_timeframe": _group_stats(closed, "trigger_timeframe"),
+        "by_confirmation_status": _group_stats(closed, "confirmation_status"),
+        "countertrend": _summary([r for r in closed if r.countertrend]),
+        "by_false_signal_risk": {
+            band: _summary([r for r in closed if _risk_band(r.false_signal_risk) == band])
+            for band in ("Low", "Moderate", "Elevated", "High", "Very High")
+        },
+        "total_rejections": len(rejections or []),
+        "false_breakout_rate": (
+            round(
+                100
+                * sum(1 for r in (rejections or []) if r.verdict == "FALSE BREAKOUT")
+                / len(rejections),
+                2,
+            )
+            if rejections
+            else 0.0
+        ),
+        "liquidity_trap_rate": (
+            round(
+                100
+                * sum(1 for r in (rejections or []) if r.verdict == "LIQUIDITY TRAP")
+                / len(rejections),
+                2,
+            )
+            if rejections
+            else 0.0
+        ),
     }

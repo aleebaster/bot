@@ -192,6 +192,6 @@ class PaperTradingEngine:
         return events
 
     async def daily_report(self) -> dict:
-        stats = compute_statistics(await self.signals.all_records())
+        stats = compute_statistics(await self.signals.all_records(), await self.signals.all_rejections())
         logger.info("Daily paper report: %d closed signals, PF=%s", stats["total_signals"], stats["profit_factor"])
         return stats
