@@ -5,6 +5,18 @@ It scans the market, analyses closed candles across five timeframes, and sends h
 fully justified LONG/SHORT ideas to Telegram. **No real orders are ever placed.**
 
 > Quality over quantity. If the market does not satisfy the strategy, the bot returns **NO TRADE**.
+>
+> **Signal-only by default:** the bot analyses Binance USDT-M Futures 24/7 and sends Telegram
+> signals. It never creates, modifies or closes exchange orders. See `docs/SIGNAL_ONLY_MODE.md`.
+
+### Validation status (read first)
+
+A 150-day, 12-symbol validation found the base strategy had **negative expectancy (−0.1999 R)**;
+the false-signal filter reduced drawdown (−141 R → −50 R) and removed 226 losing vs 82 profitable
+trades, but filtered expectancy remained **−0.1472 R** (95% CI −0.3867 … +0.1011). No parameter
+or threshold was tuned on this sample. Signals are analytical hypotheses, not proven edges.
+Reports: `docs/MULTI_ASSET_BACKTEST.md`, `docs/MARKET_REGIME_ANALYSIS.md`,
+`docs/SIGNAL_QUALITY_REPORT.md`.
 
 ---
 
