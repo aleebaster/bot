@@ -50,6 +50,31 @@ async def test_database_signal_lifecycle() -> None:
 
 
 @pytest.mark.asyncio
+async def test_sqlite_migration_adds_missing_columns(tmp_path) -> None:
+    import sqlite3
+
+    from sqlalchemy import text
+
+    from app.database.manager import DatabaseManager
+
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute("CREATE TABLE signals (id INTEGER PRIMARY KEY, signal_id VARCHAR(32))")
+    conn.commit()
+    conn.close()
+
+    db = DatabaseManager(f"sqlite+aiosqlite:///{path}")
+    await db.init()
+    try:
+        async with db.engine.begin() as session:
+            result = await session.execute(text("PRAGMA table_info(signals)"))
+            names = {row[1] for row in result}
+        assert {"confirmation_score", "false_signal_risk", "tracking_open", "market_regime"} <= names
+    finally:
+        await db.close()
+
+
+@pytest.mark.asyncio
 async def test_statistics_include_losses_honestly() -> None:
     db = DatabaseManager("sqlite+aiosqlite:///:memory:")
     await db.init()
