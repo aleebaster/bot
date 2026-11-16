@@ -241,6 +241,7 @@ class SignalEngine:
             return _no_trade(
                 f"False signal filter: {confirmation.verdict.value} - {detail}",
                 confirmation=confirmation.as_dict(),
+                direction=direction,
             )
         if trigger_pa.false_breakout:
             return _no_trade("False breakout detected on trigger timeframe")

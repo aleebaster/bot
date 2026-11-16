@@ -241,6 +241,24 @@ class FalseSignalEngine:
         )
 
 
+def format_rejected_from_dict(symbol: str, direction: str, data: dict) -> str:
+    """Format a rejection from the serialised diagnostics carried by EngineResult."""
+    lines = ["⚠️ SIGNAL REJECTED", "", f"Symbol: {symbol}", f"Direction: {direction}", "", "Reason:"]
+    reasons = data.get("reasons_reject") or data.get("hard_blocks") or []
+    lines.extend(f"- {reason}" for reason in reasons)
+    lines.extend(
+        [
+            "",
+            f"Confirmation Score: {float(data.get('confirmation_score', 0)):.1f}/100",
+            f"False Signal Risk: {data.get('false_signal_risk', 0)}/100 "
+            f"({data.get('risk_category', 'n/a')})",
+            "",
+            "Decision: NO TRADE.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 def format_rejected(symbol: str, direction: str, verdict: ConfirmationVerdict) -> str:
     lines = [
         "⚠️ SIGNAL REJECTED",

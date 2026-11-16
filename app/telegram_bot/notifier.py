@@ -9,9 +9,11 @@ from aiogram import Bot
 
 from app.config import Settings
 from app.signal_engine.models import Signal
+from app.false_signal.models import ConfirmationVerdict
 from app.telegram_bot.formatter import (
     format_cancellation,
     format_expiry,
+    format_rejected,
     format_scenario_change,
     format_signal,
     format_stop_loss,
@@ -61,6 +63,14 @@ class TelegramNotifier:
 
     async def send_signal(self, signal: Signal) -> bool:
         return await self.send(format_signal(signal), dedup_key=f"signal:{signal.signal_id}")
+
+    async def rejected(self, symbol: str, direction: str, verdict: ConfirmationVerdict) -> bool:
+        """Send a detailed rejection note once per identical reason."""
+        reason_key = "|".join(verdict.reasons_reject or verdict.hard_blocks)
+        return await self.send(
+            format_rejected(symbol, direction, verdict),
+            dedup_key=f"rejected:{symbol}:{direction}:{reason_key}",
+        )
 
     async def tp_hit(self, signal: Signal, level: int) -> bool:
         return await self.send(format_tp_hit(signal, level), dedup_key=f"tp{level}:{signal.signal_id}")

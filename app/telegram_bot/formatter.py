@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.false_signal.models import ConfirmationVerdict
 from app.signal_engine.models import Signal
 
 
@@ -29,9 +30,51 @@ def format_signal(signal: Signal) -> str:
         f"📈 Signal Score: {signal.score:.1f}/100 ({signal.score_breakdown.category})",
         f"📉 RSI 14: {signal.rsi14:.1f}" if signal.rsi14 is not None else "📉 RSI 14: n/a",
         f"📊 Trend: {signal.trend}",
-        "",
-        "🔍 REASONS:",
     ]
+    confirmation = signal.confirmation
+    if confirmation:
+        components = confirmation.get("confirmation_components", {})
+        lines.extend(
+            [
+                "",
+                "━━━━━━━━━━━━━━",
+                "",
+                "🧠 ENTRY QUALITY",
+                f"Confirmation Score: {confirmation.get('confirmation_score', 0):.1f}/100 "
+                f"({confirmation.get('confirmation_category', 'n/a')})",
+                f"False Signal Risk: {confirmation.get('false_signal_risk', 0)}/100 "
+                f"({confirmation.get('risk_category', 'n/a')})",
+                "",
+                f"Status: {signal.confirmation_status or confirmation.get('verdict', 'n/a')}",
+            ]
+        )
+        check_labels = {
+            "multi_timeframe": "Trend Alignment",
+            "rsi": "RSI Confirmation",
+            "candle": "Candlestick Confirmation",
+            "volume": "Volume Confirmation",
+            "breakout": "Breakout / Retest",
+            "entry_location": "Entry Zone Valid",
+        }
+        for key, label in check_labels.items():
+            value = float(components.get(key, 0))
+            cap = {"multi_timeframe": 20, "rsi": 15, "candle": 15, "volume": 10, "breakout": 10, "entry_location": 10}[key]
+            lines.append(f"{'✅' if value >= cap * 0.6 else '⚠️'} {label}")
+        lines.extend(
+            [
+                "",
+                "⚠️ RISK CHECK",
+                f"Risk/Reward: 1:{plan.risk_reward:.2f}",
+                f"Stop Distance: {plan.stop_distance:.8f}",
+                f"ATR: {plan.atr:.8f}",
+                f"Invalidation Level: {plan.stop_loss:.8f}",
+                "",
+                f"Decision: {confirmation.get('decision', 'ENTRY CONFIRMED')}",
+                "",
+                "━━━━━━━━━━━━━━",
+            ]
+        )
+    lines.extend(["", "🔍 REASONS:"])
     lines.extend(f"- {reason}" for reason in signal.reasons)
     lines.extend(
         [
@@ -46,6 +89,30 @@ def format_signal(signal: Signal) -> str:
             f"Status: {signal.status}",
             "",
             "⚠️ Analytical signal only. No real orders are placed. Paper trading mode.",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def format_rejected(symbol: str, direction: str, verdict: ConfirmationVerdict) -> str:
+    """Detailed rejection explanation - never a generic 'NO TRADE' only."""
+    lines = [
+        "⚠️ SIGNAL REJECTED",
+        "",
+        f"Symbol: {symbol}",
+        f"Direction: {direction}",
+        "",
+        "Reason:",
+    ]
+    reasons = verdict.reasons_reject or verdict.hard_blocks
+    lines.extend(f"- {reason}" for reason in reasons)
+    lines.extend(
+        [
+            "",
+            f"Confirmation Score: {verdict.confirmation.total:.1f}/100 ({verdict.confirmation.category.value})",
+            f"False Signal Risk: {verdict.risk.score}/100 ({verdict.risk.category.value})",
+            "",
+            "Decision: NO TRADE.",
         ]
     )
     return "\n".join(lines)

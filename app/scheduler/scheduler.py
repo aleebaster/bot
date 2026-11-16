@@ -110,6 +110,16 @@ class ScanScheduler:
                 continue
             symbol, result = outcome
             if result.signal is None:
+                rejection = result.diagnostics.get("confirmation")
+                if rejection:
+                    from app.false_signal.engine import format_rejected_from_dict
+
+                    await self.notifier.send(
+                        format_rejected_from_dict(
+                            symbol, str(result.diagnostics.get("direction", "")), rejection
+                        ),
+                        dedup_key=f"rejected:{symbol}:{result.diagnostics.get('direction', '')}:{';'.join(rejection.get('reasons_reject', []))}",
+                    )
                 no_trade += 1
                 continue
             signal = result.signal
