@@ -6,6 +6,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from app.backtesting.metrics import compute_metrics
+
 
 def f(value, digits: int = 2) -> str:
     if value is None:
@@ -66,7 +68,10 @@ def main() -> None:
         if "error" in info:
             rows.append([symbol, "insufficient data", "-", "-", "-", "-", "-", "-"])
             continue
-        base, kept = info["base_metrics"], info.get("kept_metrics", {})
+        base = info["base_metrics"]
+        kept = compute_rows_metrics([
+            r for r in report["rows"] if r["symbol"] == symbol and r["kept"]
+        ])
         rows.append([
             symbol, str(info["bars"]), str(info["base_trades"]), str(info["kept"]),
             f(base.get("win_rate")), f(kept.get("win_rate")),
@@ -161,7 +166,14 @@ def main() -> None:
         "Filtered ideas are shown for audit but are NOT sent as signals.",
         "",
     ]
-    lines += table(METRIC_HEADERS, [metric_row(k, v) for k, v in sorted(report["categories"].items())])
+    category_rows = {k: v for k, v in report["categories"].items()}
+    for missing in ("STRONG ENTRY", "CONFIRMED ENTRY", "EARLY ENTRY", "WEAK SIGNAL", "FALSE BREAKOUT", "LIQUIDITY TRAP"):
+        category_rows.setdefault(missing, compute_metrics([]))
+    lines += table(METRIC_HEADERS, [metric_row(k, v) for k, v in sorted(category_rows.items())])
+    zero_categories = [k for k, v in category_rows.items() if v.get("trades", 0) == 0]
+    if zero_categories:
+        lines += ["", f"Categories with **zero** occurrences in this sample: {', '.join(zero_categories)}. "
+                      "No performance conclusion is possible for them."]
     lines += ["", "## 2. LONG vs SHORT (kept signals)", ""]
     lines += table(METRIC_HEADERS, [metric_row(k, v) for k, v in sorted(report["directions"].items())])
     lines += [
