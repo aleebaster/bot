@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from app.config import Settings
 from app.market_data.exchange import ExchangeClient
@@ -67,30 +68,39 @@ class MarketDataFeed:
     async def start(self, symbols: list[str], timeframes: list[str]) -> None:
         await self.backfill(symbols, timeframes)
         self._running = True
-        if self.settings.ws_enabled and self.exchange.exchange is not None and self.exchange.exchange.has.get("watchOHLCV"):
-            for symbol in symbols:
-                for timeframe in timeframes:
-                    key = (symbol, timeframe)
-                    if key not in self._tasks or self._tasks[key].done():
-                        self._tasks[key] = asyncio.create_task(self._watch(symbol, timeframe))
-            logger.info("Started %d WebSocket candle streams", len(self._tasks))
+        if self.settings.ws_enabled and self.exchange.ws_capable:
+            pairs = [(s, tf) for s in symbols for tf in timeframes]
+            # Stagger subscriptions to respect Binance's connection-open rate.
+            for index, (symbol, timeframe) in enumerate(pairs):
+                key = (symbol, timeframe)
+                if key not in self._tasks or self._tasks[key].done():
+                    self._tasks[key] = asyncio.create_task(
+                        self._watch(symbol, timeframe, startup_delay=index * 0.3)
+                    )
+            logger.info("Started %d WebSocket candle streams (ccxt.pro)", len(pairs))
         else:
-            logger.info("WebSocket disabled/unavailable - running in REST polling mode")
+            logger.info("WebSocket unavailable - running in REST polling mode")
             self._tasks[("__poller__", "all")] = asyncio.create_task(
                 self._poll(symbols, timeframes)
             )
 
     async def _poll(self, symbols: list[str], timeframes: list[str]) -> None:
         while self._running:
-            await asyncio.sleep(max(self.settings.scan_interval_seconds, 5))
+            cycle_start = time.monotonic()
             for symbol in symbols:
                 for timeframe in timeframes:
                     await self.refill(symbol, timeframe)
+            # Keep the cadence at scan_interval_seconds instead of adding the
+            # fetch duration on top of every sleep.
+            elapsed = time.monotonic() - cycle_start
+            await asyncio.sleep(max(self.settings.scan_interval_seconds - elapsed, 1.0))
 
-    async def _watch(self, symbol: str, timeframe: str) -> None:
+    async def _watch(self, symbol: str, timeframe: str, startup_delay: float = 0.0) -> None:
         reconnect_delay = 1.0
-        ws = self.exchange.exchange.watch_ohlcv
         ccxt_symbol = self.exchange.ccxt_symbol(symbol)
+        if startup_delay:
+            await asyncio.sleep(startup_delay)
+        ws = self.exchange.pro_exchange.watch_ohlcv
         while self._running:
             try:
                 rows = await asyncio.wait_for(

@@ -64,6 +64,26 @@ def test_freshness() -> None:
     assert store.is_fresh("BTCUSDT", "1m", 60)
 
 
+def test_ws_capability_uses_pro_client() -> None:
+    from app.config import Settings
+    from app.market_data.exchange import ExchangeClient
+
+    client = ExchangeClient(Settings())
+    assert client.ws_capable is False
+
+    class FakePro:
+        has = {"watchOHLCV": True}
+
+        async def watch_ohlcv(self, *args, **kwargs):
+            return []
+
+    client.pro_exchange = FakePro()
+    assert client.ws_capable is True
+    client.pro_exchange = FakePro()
+    client.pro_exchange.has = {"watchOHLCV": None}
+    assert client.ws_capable is False
+
+
 @pytest.mark.asyncio
 async def test_fetch_ohlcv_uses_since_and_limit_keywords() -> None:
     """Regression: ccxt signature is (symbol, timeframe, since, limit)."""

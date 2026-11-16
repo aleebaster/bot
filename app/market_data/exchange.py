@@ -9,6 +9,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import ccxt.async_support as ccxt
+import ccxt.pro as ccxt_pro
 
 from app.config import Settings
 from app.market_data.models import Candle, timeframe_to_ms
@@ -27,7 +28,8 @@ class ExchangeClient:
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
-        self.exchange: Any | None = None
+        self.exchange: Any | None = None  # REST client (ccxt.async_support)
+        self.pro_exchange: Any | None = None  # WebSocket client (ccxt.pro)
         self._time_offset_ms = 0
 
     async def connect(self) -> None:
@@ -46,12 +48,36 @@ class ExchangeClient:
             self.exchange.secret = self.settings.binance_api_secret
 
         await self.exchange.load_markets()
+
+        # ccxt.async_support.binance reports watchOHLCV=None and its
+        # watch_ohlcv() raises NotSupported. Streaming lives in ccxt.pro.
+        pro_class = getattr(ccxt_pro, self.settings.exchange_id, None)
+        if pro_class is not None:
+            try:
+                self.pro_exchange = pro_class(options)
+                await self.pro_exchange.load_markets()
+                logger.info(
+                    "WebSocket client ready (watchOHLCV=%s)",
+                    self.pro_exchange.has.get("watchOHLCV"),
+                )
+            except Exception as exc:
+                logger.warning("WebSocket client init failed, REST polling will be used: %s", exc)
+                self.pro_exchange = None
+
         try:
             server_time = await self.exchange.fetch_time()
             self._time_offset_ms = int(server_time) - int(time.time() * 1000)
             logger.info("Exchange time sync offset: %d ms", self._time_offset_ms)
         except Exception as exc:  # pragma: no cover - depends on exchange availability
             logger.warning("Time sync failed, using local clock: %s", exc)
+
+    @property
+    def ws_capable(self) -> bool:
+        return bool(
+            self.pro_exchange is not None
+            and self.pro_exchange.has.get("watchOHLCV")
+            and hasattr(self.pro_exchange, "watch_ohlcv")
+        )
 
     @property
     def now_ms(self) -> int:
@@ -170,6 +196,9 @@ class ExchangeClient:
         return [symbol for _, symbol in candidates[:limit]]
 
     async def close(self) -> None:
+        if self.pro_exchange is not None:
+            await self.pro_exchange.close()
+            self.pro_exchange = None
         if self.exchange is not None:
             await self.exchange.close()
             self.exchange = None

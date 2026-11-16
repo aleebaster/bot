@@ -12,7 +12,7 @@ from app.config import Settings
 from app.constants import CONFIRM_TIMEFRAME, LONG, SETUP_TIMEFRAME, SHORT, TRIGGER_TIMEFRAME
 from app.indicators.divergence import analyze_rsi, detect_divergences
 from app.indicators.technical import IndicatorSet
-from app.market_data.models import frame_to_candles
+from app.market_data.models import frame_to_candles, timeframe_to_ms
 from app.price_action.structure import analyze as analyze_price_action
 from app.risk_management.manager import RiskManager
 from app.risk_management.position import InvalidTradePlan
@@ -61,8 +61,19 @@ class SignalEngine:
                 continue
             last_ts = int(frame["timestamp"].iloc[-1])
             age_seconds = (now_ms - last_ts) / 1000.0
-            if age_seconds > self.settings.max_quote_age_seconds:
-                return _no_trade(f"Stale data on {timeframe} ({age_seconds:.0f}s old)", age=age_seconds)
+            # A closed 1D bar is naturally up to 24h old. Applying a flat
+            # 180s quote-age limit to every timeframe makes higher timeframes
+            # permanently "stale" and blocks every signal. The tolerance must
+            # scale with the bar duration while still rejecting a dead feed.
+            allowed_age = max(
+                self.settings.max_quote_age_seconds,
+                2.0 * timeframe_to_ms(timeframe) / 1000.0 + 60.0,
+            )
+            if age_seconds > allowed_age:
+                return _no_trade(
+                    f"Stale data on {timeframe} ({age_seconds:.0f}s old, limit {allowed_age:.0f}s)",
+                    age=age_seconds,
+                )
             if bool(frame["closed"].iloc[-1]) is False:
                 return _no_trade(f"Unconfirmed candle on {timeframe}")
 
