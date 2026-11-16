@@ -5,8 +5,30 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from experiments.features import bootstrap_ci, bucket, group_by
+from experiments.features import bootstrap_ci
 from experiments.v6.metrics import metrics, v0_rows, v6_entered
+
+
+def group_by(rows: list[dict], key: str) -> dict:
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        groups.setdefault(str(row.get(key)), []).append(row)
+    return {name: metrics(items) for name, items in groups.items()}
+
+
+def bucket(rows: list[dict], key: str, edges: list[float], labels: list[str]) -> dict:
+    result: dict[str, list[dict]] = {label: [] for label in labels}
+    for row in rows:
+        value = row.get(key)
+        if value is None:
+            continue
+        for index, edge in enumerate(edges):
+            if value < edge:
+                result[labels[index]].append(row)
+                break
+        else:
+            result[labels[-1]].append(row)
+    return {name: metrics(items) for name, items in result.items()}
 
 
 def compare(rows: list[dict]) -> dict:
@@ -28,7 +50,12 @@ def compare(rows: list[dict]) -> dict:
             "v0": metrics(v0),
             "v6_entered": metrics(v6),
             "v6_per_original_signal": metrics([
-                {**r, "outcome": r.get("outcome", "NOT_ENTERED"), "realized_r": r.get("realized_r", 0.0)}
+                {
+                    **r,
+                    "outcome": r.get("outcome", "NOT_ENTERED"),
+                    "realized_r": r.get("realized_r", 0.0),
+                    "gross_r": r.get("gross_r", r.get("gross_r_v0", r.get("realized_r", 0.0))),
+                }
                 for r in rows
             ]),
         },

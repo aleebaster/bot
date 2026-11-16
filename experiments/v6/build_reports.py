@@ -53,36 +53,32 @@ def main() -> None:
         "",
         "## 1. Sample",
         "",
-        table(["Metric", "Value"], [
-            ["V0 signals in window", sample["v0_signals"]],
-            ["V6 entered trades", sample["v6_entered"]],
-            ["EARLY signals", sample["early_signals"]],
-            ["EARLY confirmed after next bar", sample["early_confirmed"]],
-            ["EARLY invalidated", sample["early_invalidated"]],
-            ["EARLY expired", sample["early_expired"]],
-        ]),
-        "",
-        "## 2. V0 vs V6",
-        "",
     ]
+    lines += table(["Metric", "Value"], [
+        ["V0 signals in window", sample["v0_signals"]],
+        ["V6 entered trades", sample["v6_entered"]],
+        ["EARLY signals", sample["early_signals"]],
+        ["EARLY confirmed after next bar", sample["early_confirmed"]],
+        ["EARLY invalidated", sample["early_invalidated"]],
+        ["EARLY expired", sample["early_expired"]],
+    ])
+    lines += ["", "## 2. V0 vs V6", ""]
     lines += table(HEADERS, [mrow("V0 production", m0), mrow("V6 entered", m6),
                              mrow("V6 per original signal (zeros for skipped)", c["metrics"]["v6_per_original_signal"])])
     lines += [
         "",
         "## 3. EARLY recheck economics",
         "",
-        table(["Metric", "Value"], [
-            ["Avoided losing ideas", c["avoided_losses"]["count"]],
-            ["R avoided", f(c["avoided_losses"]["r_sum"], 4)],
-            ["Trades worsened by delayed entry", c["delay_losses"]["count"]],
-            ["Extra R lost to delay", f(c["delay_losses"]["r_sum"], 4)],
-            ["Average fee R on V6 entries", f(c["costs"]["avg_fee_r"], 4)],
-            ["Average entry shift (ATR)", f(c["costs"]["avg_entry_shift_atr"], 4)],
-        ]),
-        "",
-        "## 4. Groups (V6 entered)",
-        "",
     ]
+    lines += table(["Metric", "Value"], [
+        ["Avoided losing ideas", c["avoided_losses"]["count"]],
+        ["R avoided", f(c["avoided_losses"]["r_sum"], 4)],
+        ["Trades worsened by delayed entry", c["delay_losses"]["count"]],
+        ["Extra R lost to delay", f(c["delay_losses"]["r_sum"], 4)],
+        ["Average fee R on V6 entries", f(c["costs"]["avg_fee_r"], 4)],
+        ["Average entry shift (ATR)", f(c["costs"]["avg_entry_shift_atr"], 4)],
+    ])
+    lines += ["", "## 4. Groups (V6 entered)", ""]
     for title, key in [
         ("Direction", "direction_v6"), ("Symbol", "symbol_v6"), ("Regime", "regime_v6"),
         ("Volatility", "volatility_v6"), ("Split", "split_v6"),
@@ -99,6 +95,14 @@ def main() -> None:
         "- The whole window is OOS relative to V6 development; internal thirds are diagnostic splits.",
         "- Zero-R outcomes for skipped ideas are not losses: they represent opportunities not taken.",
         "- No parameter was tuned on this window; V6 remains experimental unless all criteria pass.",
+        "",
+        "## Conclusion",
+        "",
+        f"On this independent window V6 entered **{sample['v6_entered']}** trades with expectancy "
+        f"**{f(m6['expectancy_r'], 4)} R**, PF **{f(m6['profit_factor'], 3)}** and OOS expectancy "
+        f"**{f(c['groups']['split_v6'].get('out_of_sample', {}).get('expectancy_r'), 4)} R** — worse "
+        f"than V0 on expectancy, PF and OOS. The forward test does **not** support promoting V6. "
+        "Keep it experimental and do not enable it for live Telegram signals.",
         "",
     ]
     Path("docs/V6_FORWARD_VALIDATION.md").write_text("\n".join(lines), encoding="utf-8")
@@ -125,18 +129,16 @@ def main() -> None:
         "",
         "## Bootstrap 95% CI (expectancy)",
         "",
-        table(["Arm", "N", "Mean", "CI low", "CI high"], [
-            ["V0", boot0["n"], f(boot0["mean"], 4), f(boot0["ci_low"], 4), f(boot0["ci_high"], 4)],
-            ["V6", boot6["n"], f(boot6["mean"], 4), f(boot6["ci_low"], 4), f(boot6["ci_high"], 4)],
-            ["V6 per original signal", c["bootstrap"]["v6_per_signal"]["n"],
-             f(c["bootstrap"]["v6_per_signal"]["mean"], 4),
-             f(c["bootstrap"]["v6_per_signal"]["ci_low"], 4),
-             f(c["bootstrap"]["v6_per_signal"]["ci_high"], 4)],
-        ]),
-        "",
-        "## Direction",
-        "",
     ]
+    lines += table(["Arm", "N", "Mean", "CI low", "CI high"], [
+        ["V0", boot0["n"], f(boot0["mean"], 4), f(boot0["ci_low"], 4), f(boot0["ci_high"], 4)],
+        ["V6", boot6["n"], f(boot6["mean"], 4), f(boot6["ci_low"], 4), f(boot6["ci_high"], 4)],
+        ["V6 per original signal", c["bootstrap"]["v6_per_signal"]["n"],
+         f(c["bootstrap"]["v6_per_signal"]["mean"], 4),
+         f(c["bootstrap"]["v6_per_signal"]["ci_low"], 4),
+         f(c["bootstrap"]["v6_per_signal"]["ci_high"], 4)],
+    ])
+    lines += ["", "## Direction", ""]
     lines += table(HEADERS, [mrow(f"V0 {k}", v) for k, v in sorted(c["groups"]["direction_v0"].items())])
     lines += [""]
     lines += table(HEADERS, [mrow(f"V6 {k}", v) for k, v in sorted(c["groups"]["direction_v6"].items())])
@@ -150,6 +152,9 @@ def main() -> None:
         f"**Verdict: {'all criteria passed' if all_pass else 'criteria NOT fully met — keep V6 experimental'}.**",
         "",
         "Fees, slippage and funding are identical in both arms. Win rate alone is not a success criterion.",
+        "",
+        "The shallower V6 drawdown is partly a mechanical consequence of trading 54 times instead of "
+        "267; per-trade expectancy, PF and OOS all deteriorated, so it must not be read as an improvement.",
         "",
     ]
     Path("docs/V6_VS_BASELINE.md").write_text("\n".join(lines), encoding="utf-8")
