@@ -49,8 +49,24 @@ class MultiTimeframeContext:
     confirmation: str = RANGING
 
 
+_TREND_CACHE: dict[tuple, tuple[pd.DataFrame, TrendResult]] = {}
+_TREND_CACHE_MAX = 256
+
+
 def analyze_trend(frame: pd.DataFrame, timeframe: str) -> TrendResult:
     """Combine EMA stacking, price vs VWAP/EMA200, ADX/DI and price structure."""
+    key = (id(frame), timeframe, len(frame), int(frame["timestamp"].iloc[-1]), float(frame["close"].iloc[-1]))
+    cached = _TREND_CACHE.get(key)
+    if cached is not None and cached[0] is frame:
+        return cached[1]
+    result = _analyze_trend_uncached(frame, timeframe)
+    if len(_TREND_CACHE) >= _TREND_CACHE_MAX:
+        _TREND_CACHE.clear()
+    _TREND_CACHE[key] = (frame, result)
+    return result
+
+
+def _analyze_trend_uncached(frame: pd.DataFrame, timeframe: str) -> TrendResult:
     indicators = IndicatorSet.from_frame(frame)
     close = float(frame["close"].iloc[-1])
     ema9 = indicators.last("ema9")

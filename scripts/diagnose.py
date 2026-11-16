@@ -34,25 +34,34 @@ async def main() -> None:
         # Mirror production exactly: candles go through CandleStore and only
         # closed bars reach the engine.
         store = CandleStore()
-        frames_by_symbol: dict[str, dict] = {}
+        frames_by_symbol: dict[str, dict] = {s: {} for s in settings.watchlist}
+        semaphore = asyncio.Semaphore(settings.max_concurrent_symbols)
         api_calls = 0
-        fetch_started = time.time()
-        for symbol in settings.watchlist:
-            frames_by_symbol[symbol] = {}
-            for timeframe in TIMEFRAMES:
+
+        async def load(symbol: str, timeframe: str) -> None:
+            nonlocal api_calls
+            async with semaphore:
                 candles = await exchange.fetch_ohlcv(symbol, timeframe, limit=settings.ohlcv_limit)
                 store.upsert_many(symbol, timeframe, candles)
                 frames_by_symbol[symbol][timeframe] = store.frame(symbol, timeframe)
                 api_calls += 1
+
+        fetch_started = time.time()
+        await asyncio.gather(*(load(s, tf) for s in settings.watchlist for tf in TIMEFRAMES))
         fetch_seconds = time.time() - fetch_started
 
         now_ms = exchange.now_ms
         risk = RiskManager(settings)
+        analysis_sem = asyncio.Semaphore(settings.max_concurrent_symbols)
+
+        async def analyze(symbol: str):
+            async with analysis_sem:
+                return await asyncio.to_thread(
+                    diagnose_symbol, symbol, frames_by_symbol[symbol], settings, risk, now_ms
+                )
+
         analysis_started = time.time()
-        diagnoses = [
-            diagnose_symbol(symbol, frames_by_symbol[symbol], settings, risk, now_ms)
-            for symbol in settings.watchlist
-        ]
+        diagnoses = await asyncio.gather(*(analyze(s) for s in settings.watchlist))
         analysis_seconds = time.time() - analysis_started
 
         has = exchange.exchange.has if exchange.exchange else {}

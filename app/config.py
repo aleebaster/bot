@@ -73,6 +73,9 @@ class Settings(BaseModel):
     min_volume_usdt: float = 5_000_000.0
     max_quote_age_seconds: int = 180
     scan_interval_seconds: int = 60
+    scan_candle_close_poll_seconds: int = 5
+    signal_cooldown_minutes: int = 240
+    max_concurrent_symbols: int = 4
     ws_enabled: bool = True
     top_n_scanner: int = 20
 
@@ -105,6 +108,13 @@ class Settings(BaseModel):
             raise ValueError("min_signal_score must be in [0, 100]")
         return v
 
+    @field_validator("max_concurrent_symbols")
+    @classmethod
+    def _concurrency_bounds(cls, v: int) -> int:
+        if not 1 <= v <= 16:
+            raise ValueError("max_concurrent_symbols must be in [1, 16]")
+        return v
+
     @classmethod
     def from_env(cls) -> Settings:
         """Build settings from the process environment / loaded .env file."""
@@ -133,6 +143,9 @@ class Settings(BaseModel):
             min_volume_usdt=float(os.getenv("MIN_VOLUME_USDT", "5000000")),
             max_quote_age_seconds=int(os.getenv("MAX_QUOTE_AGE_SECONDS", "180")),
             scan_interval_seconds=int(os.getenv("SCAN_INTERVAL_SECONDS", "60")),
+            scan_candle_close_poll_seconds=int(os.getenv("SCAN_CANDLE_CLOSE_POLL_SECONDS", "5")),
+            signal_cooldown_minutes=int(os.getenv("SIGNAL_COOLDOWN_MINUTES", "240")),
+            max_concurrent_symbols=int(os.getenv("MAX_CONCURRENT_SYMBOLS", "4")),
             ws_enabled=os.getenv("WS_ENABLED", "true").lower() in {"1", "true", "yes"},
             top_n_scanner=int(os.getenv("TOP_N_SCANNER", "20")),
             database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db"),

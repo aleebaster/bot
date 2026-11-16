@@ -220,13 +220,24 @@ def analyze_breakout(
     return breakout_confirmed, false_breakout, retest
 
 
+_PA_CACHE: dict[tuple, tuple[list[Candle], PriceActionResult]] = {}
+_PA_CACHE_MAX = 256
+
+
 def analyze(candles: list[Candle], order: int = 2) -> PriceActionResult:
     """Run the full price-action analysis on closed candles."""
+    if candles:
+        key = (id(candles), order, len(candles), candles[-1].timestamp, candles[-1].close)
+        cached = _PA_CACHE.get(key)
+        if cached is not None and cached[0] is candles:
+            return cached[1]
+    else:
+        key = None
     highs, lows = find_swings(candles, order)
     events = detect_bos_choch(candles, highs, lows)
     supports, resistances = find_levels(candles, highs, lows)
     breakout, false_breakout, retest = analyze_breakout(candles, resistances, supports)
-    return PriceActionResult(
+    result = PriceActionResult(
         trend=structure_trend(highs, lows),
         swing_highs=highs,
         swing_lows=lows,
@@ -238,3 +249,8 @@ def analyze(candles: list[Candle], order: int = 2) -> PriceActionResult:
         false_breakout=false_breakout,
         retest=retest,
     )
+    if key is not None:
+        if len(_PA_CACHE) >= _PA_CACHE_MAX:
+            _PA_CACHE.clear()
+        _PA_CACHE[key] = (candles, result)
+    return result

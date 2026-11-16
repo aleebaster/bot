@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 
@@ -28,23 +29,30 @@ def _rsi_value(avg_gain: float, avg_loss: float) -> float:
 
 
 def rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    """Wilder's RSI with an SMA seed (classic StockCharts definition)."""
-    close = series.astype(float)
-    delta = close.diff()
-    gains = delta.clip(lower=0)
-    losses = -delta.clip(upper=0)
-    out = pd.Series(index=close.index, dtype=float)
-    if len(close) <= period:
-        return out
+    """Wilder's RSI with an SMA seed (classic StockCharts definition).
 
-    avg_gain = float(gains.iloc[1 : period + 1].mean())
-    avg_loss = float(losses.iloc[1 : period + 1].mean())
-    out.iloc[period] = _rsi_value(avg_gain, avg_loss)
-    for i in range(period + 1, len(close)):
-        avg_gain = (avg_gain * (period - 1) + float(gains.iloc[i])) / period
-        avg_loss = (avg_loss * (period - 1) + float(losses.iloc[i])) / period
-        out.iloc[i] = _rsi_value(avg_gain, avg_loss)
-    return out
+    The recursion uses plain NumPy scalars instead of per-bar pandas ``.iloc``
+    assignment. The formula is unchanged; only the loop implementation differs.
+    """
+    close = series.to_numpy(dtype=float)
+    n = len(close)
+    out = np.full(n, np.nan)
+    if n <= period:
+        return pd.Series(out, index=series.index)
+
+    delta = np.diff(close)
+    gains = np.where(delta > 0, delta, 0.0)
+    losses = np.where(delta < 0, -delta, 0.0)
+
+    avg_gain = float(gains[:period].mean())
+    avg_loss = float(losses[:period].mean())
+    out[period] = _rsi_value(avg_gain, avg_loss)
+    for i in range(period, n - 1):
+        idx = i + 1
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        out[idx] = _rsi_value(avg_gain, avg_loss)
+    return pd.Series(out, index=series.index)
 
 
 def true_range(frame: pd.DataFrame) -> pd.Series:
@@ -58,23 +66,25 @@ def true_range(frame: pd.DataFrame) -> pd.Series:
 
 
 def _wilder(series: pd.Series, period: int, seed_start: int = 1) -> pd.Series:
-    """Wilder smoothing: SMA seed then recursive smoothing."""
-    out = pd.Series(index=series.index, dtype=float)
+    """Wilder smoothing: SMA seed then recursive smoothing (NumPy loop)."""
+    values = series.to_numpy(dtype=float)
+    n = len(values)
+    out = np.full(n, np.nan)
     seed_end = seed_start + period - 1
-    if len(series) <= seed_end:
-        return out
-    seed = series.iloc[seed_start : seed_end + 1]
-    if seed.isna().any():
-        return out
+    if n <= seed_end:
+        return pd.Series(out, index=series.index)
+    seed = values[seed_start : seed_end + 1]
+    if np.isnan(seed).any():
+        return pd.Series(out, index=series.index)
     average = float(seed.mean())
-    out.iloc[seed_end] = average
-    for i in range(seed_end + 1, len(series)):
-        value = series.iloc[i]
-        if pd.isna(value):
+    out[seed_end] = average
+    for i in range(seed_end + 1, n):
+        value = values[i]
+        if np.isnan(value):
             break
-        average = (average * (period - 1) + float(value)) / period
-        out.iloc[i] = average
-    return out
+        average = (average * (period - 1) + value) / period
+        out[i] = average
+    return pd.Series(out, index=series.index)
 
 
 def atr(frame: pd.DataFrame, period: int = 14) -> pd.Series:
@@ -114,6 +124,24 @@ def vwap(frame: pd.DataFrame) -> pd.Series:
     return (typical * volume).cumsum() / cumulative_volume
 
 
+# Per-process cache of the most recent IndicatorSets. Frames are immutable
+# snapshots from CandleStore; identity + content fingerprint guards against
+# accidental reuse of a mutated frame.
+_INDICATOR_CACHE: dict[tuple, IndicatorSet] = {}
+_INDICATOR_CACHE_MAX = 128
+
+
+def _frame_key(frame: pd.DataFrame) -> tuple:
+    close = frame["close"].to_numpy(dtype=float)
+    return (
+        id(frame),
+        len(frame),
+        int(frame["timestamp"].iloc[-1]),
+        float(close[-1]),
+        float(close[-2]) if len(close) > 1 else 0.0,
+    )
+
+
 @dataclass
 class IndicatorSet:
     """Convenience container with all indicators for one timeframe."""
@@ -133,7 +161,11 @@ class IndicatorSet:
 
     @classmethod
     def from_frame(cls, frame: pd.DataFrame) -> IndicatorSet:
-        return cls(
+        key = _frame_key(frame)
+        cached = _INDICATOR_CACHE.get(key)
+        if cached is not None and cached.frame is frame:
+            return cached
+        result = cls(
             frame=frame,
             ema9=ema(frame["close"], 9),
             ema21=ema(frame["close"], 21),
@@ -147,6 +179,10 @@ class IndicatorSet:
             rsi21=rsi(frame["close"], 21),
             volume_sma20=sma(frame["volume"], 20),
         )
+        if len(_INDICATOR_CACHE) >= _INDICATOR_CACHE_MAX:
+            _INDICATOR_CACHE.clear()
+        _INDICATOR_CACHE[key] = result
+        return result
 
     def last(self, name: str) -> float | None:
         """Latest non-NaN value of a named indicator, or None if unavailable."""

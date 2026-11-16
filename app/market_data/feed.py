@@ -44,17 +44,26 @@ class MarketDataFeed:
     async def backfill(
         self, symbols: list[str], timeframes: list[str], limit: int | None = None
     ) -> None:
-        """Initial REST load for every requested symbol/timeframe pair."""
-        for symbol in symbols:
-            for timeframe in timeframes:
+        """Initial REST load with bounded concurrency.
+
+        ccxt's per-exchange throttler still enforces Binance weight limits; the
+        semaphore additionally caps in-flight requests so a large watchlist
+        cannot burst the connection.
+        """
+        semaphore = asyncio.Semaphore(self.settings.max_concurrent_symbols)
+
+        async def load(symbol: str, timeframe: str) -> None:
+            async with semaphore:
                 try:
                     candles = await self.exchange.fetch_ohlcv(
                         symbol, timeframe, limit or self.settings.ohlcv_limit
                     )
                     added = self.store.upsert_many(symbol, timeframe, candles)
-                    logger.info("Backfilled %s %s: %d new bars", symbol, timeframe, added)
+                    logger.debug("Backfilled %s %s: %d new bars", symbol, timeframe, added)
                 except Exception as exc:
                     logger.error("Backfill failed for %s %s: %s", symbol, timeframe, exc)
+
+        await asyncio.gather(*(load(s, tf) for s in symbols for tf in timeframes))
 
     async def refill(self, symbol: str, timeframe: str) -> None:
         """REST refill used after detecting gaps or stale data."""
@@ -85,11 +94,15 @@ class MarketDataFeed:
             )
 
     async def _poll(self, symbols: list[str], timeframes: list[str]) -> None:
+        semaphore = asyncio.Semaphore(self.settings.max_concurrent_symbols)
+
+        async def refresh(symbol: str, timeframe: str) -> None:
+            async with semaphore:
+                await self.refill(symbol, timeframe)
+
         while self._running:
             cycle_start = time.monotonic()
-            for symbol in symbols:
-                for timeframe in timeframes:
-                    await self.refill(symbol, timeframe)
+            await asyncio.gather(*(refresh(s, tf) for s in symbols for tf in timeframes))
             # Keep the cadence at scan_interval_seconds instead of adding the
             # fetch duration on top of every sleep.
             elapsed = time.monotonic() - cycle_start

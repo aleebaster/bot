@@ -69,6 +69,11 @@ class CandleStore:
     def frame(self, symbol: str, timeframe: str, limit: int | None = None) -> pd.DataFrame:
         return candles_to_frame(self.get_closed(symbol, timeframe, limit))
 
+    def latest_closed_ts(self, symbol: str, timeframe: str) -> int:
+        """Open-time of the newest closed bar (0 when no data)."""
+        candle = self.latest(symbol, timeframe)
+        return candle.timestamp if candle else 0
+
     def latest(self, symbol: str, timeframe: str, include_open: bool = False) -> Candle | None:
         buf = self._buffer(symbol, timeframe)
         pool = list(buf.candles.values()) if include_open else [c for c in buf.candles.values() if c.closed]

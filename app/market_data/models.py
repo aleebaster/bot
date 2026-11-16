@@ -26,6 +26,15 @@ def timeframe_to_label(timeframe: str) -> str:
     return timeframe.strip().upper()
 
 
+def freshness_limit_seconds(timeframe: str, quote_age_seconds: int) -> float:
+    """Maximum legitimate age of the newest *closed* bar for a timeframe.
+
+    A closed bar's open-time is 1x..2x the bar duration old, so a flat quote
+    age (e.g. 180s) would permanently mark 1D/4H/1H data as stale.
+    """
+    return max(float(quote_age_seconds), 2.0 * timeframe_to_ms(timeframe) / 1000.0 + 60.0)
+
+
 @dataclass(frozen=True)
 class Candle:
     """A single OHLCV bar. ``timestamp`` is the OPEN time in milliseconds."""
@@ -69,22 +78,35 @@ def candles_to_frame(candles: list[Candle]) -> pd.DataFrame:
     return frame
 
 
+_CANDLE_CACHE: dict[tuple, tuple[pd.DataFrame, list[Candle]]] = {}
+_CANDLE_CACHE_MAX = 256
+
+
 def frame_to_candles(frame: pd.DataFrame) -> list[Candle]:
     """Convert a DataFrame produced by :func:`candles_to_frame` back to candles."""
+    if frame.empty:
+        return []
+    key = (id(frame), len(frame), int(frame["timestamp"].iloc[-1]), float(frame["close"].iloc[-1]))
+    cached = _CANDLE_CACHE.get(key)
+    if cached is not None and cached[0] is frame:
+        return cached[1]
     candles: list[Candle] = []
-    for idx, row in frame.iterrows():
-        ts = int(row["timestamp"]) if "timestamp" in row else int(idx.timestamp() * 1000)
+    for row in frame.itertuples(index=False):
+        ts = int(row.timestamp)
         candles.append(
             Candle(
                 timestamp=ts,
-                open=float(row["open"]),
-                high=float(row["high"]),
-                low=float(row["low"]),
-                close=float(row["close"]),
-                volume=float(row["volume"]),
-                closed=bool(row.get("closed", True)),
+                open=float(row.open),
+                high=float(row.high),
+                low=float(row.low),
+                close=float(row.close),
+                volume=float(row.volume),
+                closed=bool(row.closed),
             )
         )
+    if len(_CANDLE_CACHE) >= _CANDLE_CACHE_MAX:
+        _CANDLE_CACHE.clear()
+    _CANDLE_CACHE[key] = (frame, candles)
     return candles
 
 

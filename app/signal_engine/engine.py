@@ -12,7 +12,7 @@ from app.config import Settings
 from app.constants import CONFIRM_TIMEFRAME, LONG, SETUP_TIMEFRAME, SHORT, TRIGGER_TIMEFRAME
 from app.indicators.divergence import analyze_rsi, detect_divergences
 from app.indicators.technical import IndicatorSet
-from app.market_data.models import frame_to_candles, timeframe_to_ms
+from app.market_data.models import freshness_limit_seconds, frame_to_candles
 from app.price_action.structure import analyze as analyze_price_action
 from app.risk_management.manager import RiskManager
 from app.risk_management.position import InvalidTradePlan
@@ -65,10 +65,7 @@ class SignalEngine:
             # 180s quote-age limit to every timeframe makes higher timeframes
             # permanently "stale" and blocks every signal. The tolerance must
             # scale with the bar duration while still rejecting a dead feed.
-            allowed_age = max(
-                self.settings.max_quote_age_seconds,
-                2.0 * timeframe_to_ms(timeframe) / 1000.0 + 60.0,
-            )
+            allowed_age = freshness_limit_seconds(timeframe, self.settings.max_quote_age_seconds)
             if age_seconds > allowed_age:
                 return _no_trade(
                     f"Stale data on {timeframe} ({age_seconds:.0f}s old, limit {allowed_age:.0f}s)",

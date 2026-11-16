@@ -16,7 +16,7 @@ from app.config import Settings
 from app.constants import CONFIRM_TIMEFRAME, LONG, SETUP_TIMEFRAME, SHORT, TRIGGER_TIMEFRAME
 from app.indicators.divergence import analyze_rsi, detect_divergences
 from app.indicators.technical import IndicatorSet
-from app.market_data.models import frame_to_candles, timeframe_to_ms
+from app.market_data.models import freshness_limit_seconds, frame_to_candles
 from app.price_action.structure import analyze as analyze_price_action
 from app.risk_management.manager import RiskManager
 from app.risk_management.position import InvalidTradePlan
@@ -104,6 +104,7 @@ def _tf_stats(frame: pd.DataFrame, timeframe: str) -> TimeframeStats:
     indicators = IndicatorSet.from_frame(frame)
     candle_frame = frame_to_candles(frame)
     pa = analyze_price_action(candle_frame)
+    trend = analyze_trend(frame, timeframe)
     try:
         divergences = [d.kind for d in detect_divergences(frame, timeframe, 14)]
     except Exception:
@@ -129,11 +130,11 @@ def _tf_stats(frame: pd.DataFrame, timeframe: str) -> TimeframeStats:
         volume=float(frame["volume"].iloc[-1]),
         volume_sma20=indicators.last("volume_sma20"),
         relative_volume=_relative_volume(frame),
-        trend_direction=analyze_trend(frame, timeframe).direction,
-        trend_strength=analyze_trend(frame, timeframe).strength,
-        ema_alignment=analyze_trend(frame, timeframe).ema_alignment,
-        price_vs_vwap=analyze_trend(frame, timeframe).price_vs_vwap,
-        price_vs_ema200=analyze_trend(frame, timeframe).price_vs_ema200,
+        trend_direction=trend.direction,
+        trend_strength=trend.strength,
+        ema_alignment=trend.ema_alignment,
+        price_vs_vwap=trend.price_vs_vwap,
+        price_vs_ema200=trend.price_vs_ema200,
         structure_trend=pa.trend,
         patterns=[p.name for p in detect_patterns(candle_frame)],
         divergences=divergences,
@@ -200,7 +201,7 @@ def diagnose_symbol(
         if frame.empty:
             continue
         age = (now_ms - int(frame["timestamp"].iloc[-1])) / 1000.0
-        allowed_age = max(settings.max_quote_age_seconds, 2.0 * timeframe_to_ms(timeframe) / 1000.0 + 60.0)
+        allowed_age = freshness_limit_seconds(timeframe, settings.max_quote_age_seconds)
         checks.append(FilterCheck(
             f"freshness:{timeframe}", age <= allowed_age,
             f"last closed bar age = {age:.0f}s (limit {allowed_age:.0f}s)",
