@@ -10,6 +10,7 @@ import pandas as pd
 from app.candle_patterns.detector import BEARISH, BULLISH, detect_patterns
 from app.config import Settings
 from app.constants import CONFIRM_TIMEFRAME, LONG, SETUP_TIMEFRAME, SHORT, TRIGGER_TIMEFRAME
+from app.false_signal.engine import FalseSignalEngine
 from app.indicators.divergence import analyze_rsi, detect_divergences
 from app.indicators.technical import IndicatorSet
 from app.market_data.models import freshness_limit_seconds, frame_to_candles
@@ -48,6 +49,8 @@ class SignalEngine:
         self.settings = settings
         self.risk_manager = risk_manager
         self.analyzer = analyzer or MultiTimeframeAnalyzer()
+        # Add-only gate: never changes the base 80/100 threshold.
+        self.false_signal_engine = FalseSignalEngine(settings)
 
     def generate(
         self, symbol: str, frames: dict[str, pd.DataFrame], meta: dict | None = None
@@ -229,6 +232,16 @@ class SignalEngine:
                 score=breakdown.total,
                 breakdown=breakdown.as_dict(),
             )
+        # Additional confirmation layer (additive filter, threshold unchanged).
+        confirmation = self.false_signal_engine.evaluate(
+            symbol, direction, frames, plan, now_ms
+        )
+        if not confirmation.approved:
+            detail = "; ".join(confirmation.reasons_reject or confirmation.hard_blocks)
+            return _no_trade(
+                f"False signal filter: {confirmation.verdict.value} - {detail}",
+                confirmation=confirmation.as_dict(),
+            )
         if trigger_pa.false_breakout:
             return _no_trade("False breakout detected on trigger timeframe")
 
@@ -267,11 +280,19 @@ class SignalEngine:
             funding_rate=meta.get("funding_rate"),
             open_interest=meta.get("open_interest"),
             expiration=now_ms + 4 * 60 * 60 * 1000,
+            confirmation=confirmation.as_dict(),
+            confirmation_status=confirmation.verdict.value,
+            false_signal_risk=confirmation.risk.score,
+            countertrend=confirmation.countertrend,
         )
         return EngineResult(
             signal=signal,
             reason="All conditions met",
             score=breakdown.total,
             category=breakdown.category,
-            diagnostics={"score": breakdown.as_dict(), "relative_volume_5m": rv_5},
+            diagnostics={
+                "score": breakdown.as_dict(),
+                "relative_volume_5m": rv_5,
+                "confirmation": confirmation.as_dict(),
+            },
         )

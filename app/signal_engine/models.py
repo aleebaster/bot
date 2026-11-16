@@ -81,6 +81,12 @@ class Signal:
     open_interest: float | None = None
     expiration: int = 0
     status: str = "ACTIVE"
+    # Populated by the optional False Signal Detection Engine. Defaults keep
+    # all existing Signal construction sites valid.
+    confirmation: dict | None = None
+    confirmation_status: str = ""
+    false_signal_risk: int = 0
+    countertrend: bool = False
 
     @property
     def entry(self) -> float:
