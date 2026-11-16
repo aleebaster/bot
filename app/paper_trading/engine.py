@@ -90,14 +90,19 @@ class PaperTradingEngine:
         )
 
     async def open_from_signal(self, signal: Signal) -> bool:
-        """Open a simulated position and persist the originating signal."""
-        await self.signals.add(signal)
-        if not self.settings.paper_trading:
-            logger.info("Paper trading disabled - signal stored but not simulated")
+        """Persist the signal; open a paper position only if explicitly enabled.
+
+        Returning True means the SIGNAL was stored (Telegram delivery may
+        proceed). Paper trading is optional and is never required for signals.
+        """
+        if not await self.signals.add(signal):
             return False
+        if not self.settings.paper_trading:
+            logger.info("SIGNAL-ONLY: stored %s, no paper position", signal.signal_id)
+            return True
         if not await self.positions.open(signal):
             logger.info("Paper position already exists: %s", signal.signal_id)
-            return False
+            return True
         logger.info("Opened PAPER %s %s %s (id=%s)", signal.symbol, signal.direction, signal.entry, signal.signal_id)
         return True
 
@@ -127,6 +132,39 @@ class PaperTradingEngine:
             await self.signals.apply_tracking(position.signal_id, update)
             await self._update_position(position, update)
             events.extend(await self._notify(position, update))
+        return events
+
+    async def update_signals(
+        self, candles_by_symbol: dict[str, list[Candle]]
+    ) -> list[PaperEvent]:
+        """Track stored signals without any paper position (signal-only mode)."""
+        events: list[PaperEvent] = []
+        for record in await self.signals.list_open():
+            candles = candles_by_symbol.get(record.symbol, [])
+            if not candles:
+                continue
+            setup = TrackedSetup(
+                symbol=record.symbol,
+                direction=record.direction,
+                entry=record.entry,
+                stop_loss=record.stop_loss,
+                tp1=record.tp1,
+                tp2=record.tp2,
+                tp3=record.tp3,
+                risk_usdt=record.risk_usdt,
+                notional=record.notional,
+                expiration=record.expiration,
+                timestamp=record.timestamp,
+            )
+            update = self.tracker.track(setup, candles)
+            await self.signals.apply_tracking(record.signal_id, update)
+            proxy = PaperPosition(
+                signal_id=record.signal_id, symbol=record.symbol, direction=record.direction,
+                entry=record.entry, stop_loss=record.stop_loss, tp1=record.tp1, tp2=record.tp2,
+                tp3=record.tp3, size=record.position_size, notional=record.notional,
+                margin=0.0, fees=record.estimated_cost, opened_at=record.timestamp,
+            )
+            events.extend(await self._notify(proxy, update))
         return events
 
     @staticmethod

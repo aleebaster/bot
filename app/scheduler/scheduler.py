@@ -142,6 +142,7 @@ class ScanScheduler:
 
         self.mark_scanned_candles()
         await self._track_paper_positions()
+        await self._recheck_early()
         await self._check_expirations()
         self.last_scan = time.time()
         summary = {"scanned": scanned, "signals": signals, "no_trade": no_trade}
@@ -156,9 +157,48 @@ class ScanScheduler:
             if not frame.empty:
                 candles_by_symbol[symbol] = frame_to_candles(frame)
         if candles_by_symbol:
-            events = await self.paper.update(candles_by_symbol)
+            if self.settings.paper_trading:
+                events = await self.paper.update(candles_by_symbol)
+            else:
+                events = await self.paper.update_signals(candles_by_symbol)
             for event in events:
-                logger.info("Paper event: %s %s %s", event.kind, event.symbol, event.detail)
+                logger.info("Signal lifecycle event: %s %s %s", event.kind, event.symbol, event.detail)
+
+    async def _recheck_early(self) -> None:
+        """EARLY ENTRY -> CONFIRMED or INVALIDATED on the next closed bar."""
+        from app.risk_management.position import TradePlan
+
+        records = [
+            r for r in await self.paper.signals.list_open()
+            if r.confirmation_status == "EARLY ENTRY" and not r.recheck_status
+        ]
+        for record in records:
+            frames = {tf: self.store.frame(record.symbol, tf) for tf in TIMEFRAMES}
+            if any(frame.empty for frame in frames.values()):
+                continue
+            plan = TradePlan(
+                symbol=record.symbol, direction=record.direction,
+                entry_low=record.entry_low, entry_high=record.entry_high, entry=record.entry,
+                stop_loss=record.stop_loss, tp1=record.tp1, tp2=record.tp2, tp3=record.tp3,
+                risk_reward=record.risk_reward, atr=abs(record.entry - record.stop_loss) / 1.5,
+                stop_distance=abs(record.entry - record.stop_loss), stop_atr_multiple=1.5,
+                position_size=record.position_size, notional=record.notional, margin=0.0,
+                risk_usdt=record.risk_usdt, estimated_cost=record.estimated_cost,
+            )
+            result = self.engine.false_signal_engine.recheck(
+                record.symbol, record.signal_id, "EARLY ENTRY", record.direction,
+                frames, plan, self.exchange.now_ms,
+            )
+            await self.paper.signals.set_recheck_status(record.signal_id, result.new_verdict.value)
+            if result.invalidated:
+                await self.paper.signals.invalidate(
+                    record.signal_id, "; ".join(result.reasons)
+                )
+                await self.notifier.send(
+                    f"🔄 SIGNAL INVALIDATED — {record.symbol}\n"
+                    f"ID: {record.signal_id}\nReason: {'; '.join(result.reasons)}"
+                )
+                logger.info("Early signal invalidated: %s", record.signal_id)
 
     async def _check_expirations(self) -> None:
         now = self.exchange.now_ms

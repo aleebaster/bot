@@ -82,7 +82,10 @@ class Settings(BaseModel):
     # --- Storage / runtime --------------------------------------------------
     database_url: str = "sqlite+aiosqlite:///./data/signals.db"
     log_level: str = "INFO"
-    paper_trading: bool = True  # default mode; real orders are never placed
+    # Signal-only is the default and only required mode. Paper trading is an
+    # optional internal simulation and is never needed for Telegram signals.
+    signal_only: bool = True
+    paper_trading: bool = False
     dry_run: bool = True
     watchlist: list[str] = Field(default_factory=lambda: list(DEFAULT_WATCHLIST))
 
@@ -150,7 +153,9 @@ class Settings(BaseModel):
             top_n_scanner=int(os.getenv("TOP_N_SCANNER", "20")),
             database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/signals.db"),
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
-            paper_trading=os.getenv("PAPER_TRADING", "true").lower()
+            signal_only=os.getenv("SIGNAL_ONLY", "true").lower()
+            in {"1", "true", "yes"},
+            paper_trading=os.getenv("PAPER_TRADING", "false").lower()
             in {"1", "true", "yes"},
             dry_run=os.getenv("DRY_RUN", "true").lower() in {"1", "true", "yes"},
             watchlist=_csv_strs(os.getenv("WATCHLIST")) or list(DEFAULT_WATCHLIST),

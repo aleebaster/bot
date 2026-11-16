@@ -19,7 +19,7 @@ async def test_paper_position_opens_and_closes() -> None:
     db = DatabaseManager("sqlite+aiosqlite:///:memory:")
     await db.init()
     notifier = TelegramNotifier(Settings())
-    paper = PaperTradingEngine(Settings(), db, notifier)
+    paper = PaperTradingEngine(Settings(paper_trading=True), db, notifier)
     plan = calculate_trade_plan("BTCUSDT", "LONG", 99, 101, 98, [110], 2.0, 1000, 0.005, 1, 2.0, CostModel())
     signal = Signal(
         symbol="BTCUSDT", direction="LONG", timestamp=BASE_TS, signal_id="paper1",

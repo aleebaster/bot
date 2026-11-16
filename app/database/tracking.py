@@ -8,7 +8,7 @@ from app.market_data.models import Candle
 from app.risk_management.position import CostModel
 from app.signal_engine.models import Signal
 
-CLOSED_OUTCOMES = {"SL", "TP1", "TP2", "TP3", "EXPIRED"}
+CLOSED_OUTCOMES = {"SL", "TP1", "TP2", "TP3", "EXPIRED", "INVALIDATED"}
 
 
 @dataclass(frozen=True)

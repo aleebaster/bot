@@ -67,6 +67,7 @@ class SignalRepository:
             rejection_reasons=json.dumps((signal.confirmation or {}).get("reasons_reject", [])),
             entry_location=(signal.confirmation or {}).get("entry_location", ""),
             countertrend=int(signal.countertrend),
+            tracking_open=1,
             outcome="OPEN",
             created_at=now,
             updated_at=now,
@@ -77,13 +78,24 @@ class SignalRepository:
         return True
 
     async def apply_tracking(self, signal_id: str, update_data: TrackingUpdate) -> None:
+        outcome = update_data.outcome
+        status = {
+            "OPEN": "ACTIVE",
+            "TP1": "TP1 HIT",
+            "TP2": "TP2 HIT",
+            "TP3": "TP3 HIT",
+            "SL": "SL HIT",
+            "EXPIRED": "EXPIRED",
+        }.get(outcome, "ACTIVE")
+        still_open = outcome in {"OPEN", "TP1", "TP2"}
         async with self.db.session() as session:
             await session.execute(
                 update(SignalRecord)
                 .where(SignalRecord.signal_id == signal_id)
                 .values(
-                    outcome=update_data.outcome,
-                    status="CLOSED" if update_data.outcome != "OPEN" else "ACTIVE",
+                    outcome=outcome,
+                    status=status,
+                    tracking_open=int(still_open),
                     realized_r=update_data.realized_r,
                     gross_r=update_data.gross_r,
                     mfe=update_data.mfe,
@@ -125,9 +137,33 @@ class SignalRepository:
     async def list_open(self) -> list[SignalRecord]:
         async with self.db.session() as session:
             result = await session.execute(
-                select(SignalRecord).where(SignalRecord.status == "ACTIVE")
+                select(SignalRecord).where(SignalRecord.tracking_open == 1)
             )
             return list(result.scalars().all())
+
+    async def set_recheck_status(self, signal_id: str, status: str) -> None:
+        async with self.db.session() as session:
+            await session.execute(
+                update(SignalRecord)
+                .where(SignalRecord.signal_id == signal_id)
+                .values(recheck_status=status, updated_at=int(time.time() * 1000))
+            )
+            await session.commit()
+
+    async def invalidate(self, signal_id: str, reason: str) -> None:
+        async with self.db.session() as session:
+            await session.execute(
+                update(SignalRecord)
+                .where(SignalRecord.signal_id == signal_id)
+                .values(
+                    status="INVALIDATED",
+                    outcome="INVALIDATED",
+                    rejection_reasons=reason[:1000],
+                    tracking_open=0,
+                    updated_at=int(time.time() * 1000),
+                )
+            )
+            await session.commit()
 
     async def all_records(self) -> list[SignalRecord]:
         async with self.db.session() as session:

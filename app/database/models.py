@@ -56,6 +56,7 @@ class SignalRecord(Base):
     entry_location: Mapped[str] = mapped_column(String(32), default="")
     countertrend: Mapped[bool] = mapped_column(Integer, default=0)
     recheck_status: Mapped[str] = mapped_column(String(32), default="")
+    tracking_open: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[int] = mapped_column(Integer, default=0)
 
