@@ -54,12 +54,18 @@ class TelegramNotifier:
         if not self.configured:
             logger.info("Telegram not configured; message not sent (dry run)")
             return False
-        try:
-            await self.bot.send_message(chat_id=self.settings.telegram_chat_id, text=text)
-            return True
-        except Exception as exc:
-            logger.error("Failed to send Telegram message: %s", type(exc).__name__)
-            return False
+        for attempt in range(1, 4):
+            try:
+                await self.bot.send_message(chat_id=self.settings.telegram_chat_id, text=text)
+                return True
+            except Exception as exc:
+                if attempt == 3:
+                    logger.error("Telegram send failed after 3 attempts: %s", type(exc).__name__)
+                    return False
+                delay = 0.5 * (2 ** (attempt - 1))
+                logger.warning("Telegram send attempt %d failed (%s), retry in %.1fs", attempt, type(exc).__name__, delay)
+                await asyncio.sleep(delay)
+        return False
 
     async def send_signal(self, signal: Signal) -> bool:
         return await self.send(format_signal(signal), dedup_key=f"signal:{signal.signal_id}")
