@@ -91,6 +91,12 @@ class FalseSignalEngine:
         now_ms: int | None = None,
     ) -> ConfirmationVerdict:
         now = now_ms or int(time.time() * 1000)
+        # Hard guarantee: no forming candle may participate in any sub-engine.
+        frames = {
+            tf: frame[frame["closed"]].copy() if "closed" in frame.columns else frame
+            for tf, frame in frames.items()
+            if frame is not None
+        }
         trigger = frames.get(TRIGGER_TIMEFRAME)
         setup = frames.get("15m")
         if trigger is None or setup is None or trigger.empty or setup.empty:

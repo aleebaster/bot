@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.config import Settings
 from app.constants import LONG, SHORT
 from app.false_signal.candle_confirmation import confirm_candle
 from app.false_signal.false_breakout import breakout_score, detect_false_breakout
@@ -27,7 +28,7 @@ from app.false_signal.scoring import (
     hard_rejection_checks,
 )
 from app.false_signal.volume_confirmation import confirm_volume
-from tests.factories import BASE_TS, candle, make_candles, make_frame
+from tests.factories import BASE_TS, candle, make_candles, make_frame, make_frames
 
 
 def bar(i, o, h, l, c, v=1000, closed=True):
@@ -247,6 +248,28 @@ def test_hard_rules_override_score() -> None:
     )
     assert verdict == EntryVerdict.FALSE_BREAKOUT
     assert decision == "NO TRADE"
+
+
+def test_engine_ignores_unclosed_candle_in_frame() -> None:
+    from app.false_signal.engine import FalseSignalEngine
+    from app.risk_management.position import CostModel, calculate_trade_plan
+
+    frames = make_frames()
+    plan = calculate_trade_plan(
+        "BTCUSDT", LONG, 99, 101, 98, [110], 2.0, 1000, 0.005, 1, 2.0, CostModel()
+    )
+    settings = Settings()
+    engine = FalseSignalEngine(settings)
+    now = int(frames["5m"]["timestamp"].iloc[-1]) + 1000
+    clean = engine.evaluate("BTCUSDT", LONG, frames, plan, now)
+
+    dirty = {tf: f.copy() for tf, f in frames.items()}
+    import pandas as pd
+    last = dirty["5m"].iloc[-1].to_dict()
+    last.update({"timestamp": last["timestamp"] + 300_000, "closed": False, "volume": 999999.0})
+    dirty["5m"] = pd.concat([dirty["5m"], pd.DataFrame([last])], ignore_index=True)
+    with_open = engine.evaluate("BTCUSDT", LONG, dirty, plan, now)
+    assert with_open.as_dict() == clean.as_dict()
 
 
 @pytest.mark.parametrize(
