@@ -15,15 +15,18 @@ def confirm_candle(
     atr: float,
 ) -> CandleConfirmationResult:
     result = CandleConfirmationResult()
+    candles = [c for c in candles if c.closed]
+    if not candles:
+        result.closed = False
+        result.detail = "No closed candle available"
+        return result
     if len(candles) < 2:
-        result.detail = "Insufficient candles"
+        result.closed = True
+        result.detail = "Insufficient closed candles"
         return result
 
     last = candles[-1]
-    result.closed = bool(last.closed)
-    if not result.closed:
-        result.detail = "Last candle is not closed - no confirmation"
-        return result
+    result.closed = True
 
     wanted = BULLISH if direction == LONG else BEARISH
     current_patterns = detect_patterns(candles[-4:])

@@ -28,6 +28,7 @@ def detect_liquidity_trap(
 ) -> LiquidityTrapResult:
     """Collect independent trap evidences and weight them into a strength."""
     result = LiquidityTrapResult()
+    candles = [c for c in candles if c.closed]
     if len(candles) < 3 or atr <= 0:
         return result
 

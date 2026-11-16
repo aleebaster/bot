@@ -36,6 +36,7 @@ def detect_false_breakout(
     breakout-retest behaviour as false.
     """
     result = FalseBreakoutResult(verdict=BreakoutVerdict.NO_BREAKOUT, level=level)
+    candles = [c for c in candles if c.closed]
     if not candles or level is None or level <= 0 or atr <= 0:
         return result
 
@@ -62,7 +63,11 @@ def detect_false_breakout(
     )
 
     if break_index is None:
-        if sweep:
+        if sweep and wick and relative_volume >= 1.5:
+            result.verdict = BreakoutVerdict.STOP_HUNT_CANDIDATE
+            result.findings.append(Finding("Stop hunt candidate", 0.7, "wick sweep + rejection + volume spike"))
+            result.detail = "Wick sweep with rejection and volume spike - probable stop hunt"
+        elif sweep:
             result.verdict = BreakoutVerdict.LIQUIDITY_SWEEP
             result.findings.append(Finding("Liquidity sweep of level", 0.5, f"wick crossed {level:.8f}, close returned inside"))
             result.detail = "Wick swept the level without a closing breakout"
@@ -72,7 +77,7 @@ def detect_false_breakout(
 
     after = window[break_index + 1 :]
     result.returned_inside = any(inside(c) for c in after)
-    result.holds_level = bool(after) and all(beyond(c) for c in after)
+    result.holds_level = all(beyond(c) for c in after)
     tolerance = 0.2 * atr
     result.retest = any(
         (c.low <= level + tolerance and c.close > level) if is_long
