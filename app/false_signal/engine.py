@@ -174,6 +174,25 @@ class FalseSignalEngine:
         verdict, decision = decide_verdict(
             confirmation, risk, blocks, breakout, trap, entry, reasons_confirm, reasons_reject
         )
+        setup_ind = IndicatorSet.from_frame(setup)
+        close15 = float(setup["close"].iloc[-1])
+        ema21, ema200 = setup_ind.last("ema21"), setup_ind.last("ema200")
+        vwap = setup_ind.last("vwap")
+        ema_alignment = (
+            "BULLISH" if ema21 and ema200 and close15 > ema21 > ema200
+            else "BEARISH" if ema21 and ema200 and close15 < ema21 < ema200
+            else "MIXED"
+        )
+        details = {
+            "trend": f"{mtf.alignment.value} | {mtf.detail}",
+            "ema": f"{ema_alignment} (EMA21={ema21}, EMA200={ema200})" if ema21 and ema200 else "n/a",
+            "rsi": f"RSI14={rsi.score:.1f}/15, {rsi.detail}",
+            "vwap": f"price {'above' if vwap and close15 > vwap else 'below'} VWAP ({vwap})" if vwap else "n/a",
+            "volume": volume.detail,
+            "price_action": f"15M={pa15.trend}, 5M={pa5.trend}",
+            "mtf": mtf.detail,
+            "liquidity": f"{breakout.verdict.value}; trap={trap.strength:.2f}",
+        }
         return ConfirmationVerdict(
             verdict=verdict,
             confirmation=confirmation,
@@ -190,6 +209,7 @@ class FalseSignalEngine:
             hard_blocks=blocks,
             countertrend=mtf.countertrend,
             decision=decision,
+            details=details,
         )
 
     def recheck(

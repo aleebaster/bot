@@ -243,6 +243,7 @@ class ConfirmationVerdict:
     hard_blocks: list[str] = field(default_factory=list)
     countertrend: bool = False
     decision: str = "NO TRADE"
+    details: dict = field(default_factory=dict)
 
     @property
     def approved(self) -> bool:
@@ -269,6 +270,7 @@ class ConfirmationVerdict:
             "countertrend": self.countertrend,
             "breakout_verdict": self.breakout.verdict.value,
             "trap_strength": round(self.trap.strength, 3),
+            "details": dict(self.details),
         }
 
 

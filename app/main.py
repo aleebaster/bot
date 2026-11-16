@@ -64,6 +64,32 @@ def make_bot_context(settings: Settings, scheduler: ScanScheduler, paper: PaperT
             for r in records
         ]
 
+    async def active() -> list[dict]:
+        records = await paper.signals.list_open()
+        return [
+            {
+                "symbol": r.symbol, "direction": r.direction, "status": r.status,
+                "entry": r.entry, "signal_id": r.signal_id,
+            }
+            for r in records
+        ]
+
+    def market() -> dict:
+        from app.indicators.technical import IndicatorSet
+        from app.trend_analysis.analyzer import analyze_trend
+
+        overview = {}
+        for symbol in scheduler.watchlist[:12]:
+            frame = scheduler.store.frame(symbol, "15m")
+            if frame.empty:
+                continue
+            overview[symbol] = {
+                "trend": analyze_trend(frame, "15m").direction,
+                "rsi14": IndicatorSet.from_frame(frame).last("rsi14"),
+                "score": round(scheduler.analyze_symbol(symbol).score, 2),
+            }
+        return overview
+
     return BotContext(
         settings=settings,
         notifier=notifier,
@@ -71,6 +97,8 @@ def make_bot_context(settings: Settings, scheduler: ScanScheduler, paper: PaperT
         request_scan=scheduler.request_scan,
         analyze_symbol=lambda symbol: scheduler.analyze_symbol(symbol.upper()),
         recent_signals=recent,
+        active_signals=active,
+        market_overview=market,
         get_stats=stats_provider,
         get_top_symbols=lambda: list(scheduler.watchlist),
         set_watchlist=scheduler.set_watchlist,

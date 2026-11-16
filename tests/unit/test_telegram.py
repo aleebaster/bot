@@ -20,21 +20,38 @@ def make_signal() -> Signal:
         timeframes=["5m", "15m", "1h", "4h"], setup_timeframe="15m", trigger_timeframe="5m",
         plan=plan, score=85, score_breakdown=ScoreBreakdown(multi_timeframe_trend=20, rsi=12),
         rsi14=58.0, trend="BULLISH", atr=2.0, market_context="bullish", reasons=["RSI confirmation"],
-        invalidation="close below 98", expiration=2,
+        invalidation="close below 98", expiration=2, current_price=100.0,
+        confirmation={
+            "confirmation_score": 91,
+            "false_signal_risk": 8,
+            "decision": "ENTRY CONFIRMED",
+            "confirmation_category": "STRONG",
+            "verdict": "STRONG ENTRY",
+            "details": {
+                "trend": "FULL TREND ALIGNMENT", "ema": "BULLISH", "rsi": "RSI14=58",
+                "vwap": "price above VWAP", "volume": "RV=1.5",
+                "price_action": "15M=BULLISH, 5M=BULLISH",
+                "mtf": "1D=BULLISH, 4H=BULLISH", "liquidity": "NO BREAKOUT",
+            },
+        },
     )
 
 
 def test_format_signal_contains_real_values() -> None:
     text = format_signal(make_signal())
-    assert "BTC/USDT" in text
-    assert "LONG" in text
-    assert "TP1: 102.00000000" in text
-    assert "TP2: 104.00000000" in text
-    assert "TP3: 110.00000000" in text
+    assert "Монета: BTCUSDT" in text
+    assert "Напрямок: LONG" in text
+    assert "Поточна ціна: 100.00000000" in text
+    assert "Take Profit 1: 102.00000000" in text
+    assert "Take Profit 2: 104.00000000" in text
+    assert "Take Profit 3: 110.00000000" in text
     assert "1:5.00" in text
-    assert "85.0/100" in text
+    assert "Confirmation Score: 91/100" in text
+    assert "False Signal Risk: 8/100" in text
+    assert "Підтвердження:" in text
+    assert "- Тренд: FULL TREND ALIGNMENT" in text
     assert "RSI confirmation" in text
-    assert "Status: ACTIVE" in text
+    assert "Статус: STRONG ENTRY" in text
 
 
 def test_format_tp_hit() -> None:

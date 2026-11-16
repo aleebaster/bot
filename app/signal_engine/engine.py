@@ -285,6 +285,7 @@ class SignalEngine:
             confirmation_status=confirmation.verdict.value,
             false_signal_risk=confirmation.risk.score,
             countertrend=confirmation.countertrend,
+            current_price=trigger_close,
         )
         return EngineResult(
             signal=signal,

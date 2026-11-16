@@ -7,88 +7,55 @@ from app.signal_engine.models import Signal
 
 
 def format_signal(signal: Signal) -> str:
+    """Telegram signal. All values are computed from closed market data."""
     plan = signal.plan
+    confirmation = signal.confirmation or {}
+    details = confirmation.get("details", {})
+    price = signal.current_price or plan.entry
+
     lines = [
-        "🚨 CRYPTO FUTURES SIGNAL",
+        "🚀 CRYPTO FUTURES SIGNAL",
         "",
-        f"🪙 Symbol: {signal.symbol[:-4]}/USDT" if signal.symbol.endswith("USDT") else f"🪙 Symbol: {signal.symbol}",
-        f"📊 Direction: {signal.direction}",
-        f"⏱ Timeframes: {' / '.join(signal.timeframes)}",
+        f"Монета: {signal.symbol}",
+        f"Напрямок: {signal.direction}",
+        f"Таймфрейм: {signal.trigger_timeframe.upper()}",
+        f"Поточна ціна: {price:.8f}",
+        f"Зона входу: {plan.entry_low:.8f} – {plan.entry_high:.8f}",
+        f"Stop Loss: {plan.stop_loss:.8f}",
+        f"Take Profit 1: {plan.tp1:.8f}",
+        f"Take Profit 2: {plan.tp2:.8f}",
+        f"Take Profit 3: {plan.tp3:.8f}",
         "",
-        "🎯 ENTRY ZONE:",
-        f"{plan.entry_low:.8f} – {plan.entry_high:.8f}",
+        "📊 ЯКІСТЬ СИГНАЛУ",
         "",
-        "🛑 STOP LOSS:",
-        f"{plan.stop_loss:.8f}",
+        f"Confirmation Score: {confirmation.get('confirmation_score', 0):.0f}/100",
+        f"False Signal Risk: {confirmation.get('false_signal_risk', 0)}/100",
+        f"Risk/Reward: 1:{plan.risk_reward:.2f}",
         "",
-        "✅ TAKE PROFIT:",
-        f"TP1: {plan.tp1:.8f}",
-        f"TP2: {plan.tp2:.8f}",
-        f"TP3: {plan.tp3:.8f}",
+        "Підтвердження:",
+        f"- Тренд: {details.get('trend', signal.trend)}",
+        f"- EMA: {details.get('ema', 'n/a')}",
+        f"- RSI: {details.get('rsi', f'RSI14={signal.rsi14}') if signal.rsi14 is not None else details.get('rsi', 'n/a')}",
+        f"- VWAP: {details.get('vwap', 'n/a')}",
+        f"- Volume: {details.get('volume', 'n/a')}",
+        f"- Price Action: {details.get('price_action', 'n/a')}",
+        f"- MTF Confirmation: {details.get('mtf', 'n/a')}",
+        f"- Liquidity: {details.get('liquidity', 'n/a')}",
         "",
-        f"⚖️ Risk/Reward: 1:{plan.risk_reward:.2f}",
-        f"📈 Signal Score: {signal.score:.1f}/100 ({signal.score_breakdown.category})",
-        f"📉 RSI 14: {signal.rsi14:.1f}" if signal.rsi14 is not None else "📉 RSI 14: n/a",
-        f"📊 Trend: {signal.trend}",
+        "Інвалідація:",
+        signal.invalidation or f"Закриття свічки нижче/вище {plan.stop_loss:.8f}",
+        "",
+        "Пояснення:",
     ]
-    confirmation = signal.confirmation
-    if confirmation:
-        components = confirmation.get("confirmation_components", {})
-        lines.extend(
-            [
-                "",
-                "━━━━━━━━━━━━━━",
-                "",
-                "🧠 ENTRY QUALITY",
-                f"Confirmation Score: {confirmation.get('confirmation_score', 0):.1f}/100 "
-                f"({confirmation.get('confirmation_category', 'n/a')})",
-                f"False Signal Risk: {confirmation.get('false_signal_risk', 0)}/100 "
-                f"({confirmation.get('risk_category', 'n/a')})",
-                "",
-                f"Status: {signal.confirmation_status or confirmation.get('verdict', 'n/a')}",
-            ]
-        )
-        check_labels = {
-            "multi_timeframe": "Trend Alignment",
-            "rsi": "RSI Confirmation",
-            "candle": "Candlestick Confirmation",
-            "volume": "Volume Confirmation",
-            "breakout": "Breakout / Retest",
-            "entry_location": "Entry Zone Valid",
-        }
-        for key, label in check_labels.items():
-            value = float(components.get(key, 0))
-            cap = {"multi_timeframe": 20, "rsi": 15, "candle": 15, "volume": 10, "breakout": 10, "entry_location": 10}[key]
-            lines.append(f"{'✅' if value >= cap * 0.6 else '⚠️'} {label}")
-        lines.extend(
-            [
-                "",
-                "⚠️ RISK CHECK",
-                f"Risk/Reward: 1:{plan.risk_reward:.2f}",
-                f"Stop Distance: {plan.stop_distance:.8f}",
-                f"ATR: {plan.atr:.8f}",
-                f"Invalidation Level: {plan.stop_loss:.8f}",
-                "",
-                f"Decision: {confirmation.get('decision', 'ENTRY CONFIRMED')}",
-                "",
-                "━━━━━━━━━━━━━━",
-            ]
-        )
-    lines.extend(["", "🔍 REASONS:"])
     lines.extend(f"- {reason}" for reason in signal.reasons)
     lines.extend(
         [
             "",
-            "⚠️ INVALIDATION:",
-            signal.invalidation,
+            f"Статус: {signal.confirmation_status or confirmation.get('verdict', 'n/a')}",
+            f"Рішення: {confirmation.get('decision', 'ENTRY CONFIRMED')}",
+            f"ID сигналу: {signal.signal_id}",
             "",
-            f"💰 Risk: {plan.risk_usdt:.2f} USDT | Size: {plan.position_size} | Margin: {plan.margin:.2f}",
-            f"🧮 Est. costs: {plan.estimated_cost:.4f} USDT | ATR: {plan.atr:.8f}",
-            f"🕒 Expires: {signal.expiration}",
-            "",
-            f"Status: {signal.status}",
-            "",
-            "⚠️ Analytical signal only. No real orders are placed. Paper trading mode.",
+            "⚠️ Лише аналітичний сигнал. Бот не відкриває реальні ордери.",
         ]
     )
     return "\n".join(lines)
@@ -170,10 +137,13 @@ def format_help() -> str:
     return (
         "🤖 CRYPTO FUTURES SIGNAL BOT\n\n"
         "/start — welcome\n"
-        "/status — bot status\n"
-        "/scan — trigger a manual scan\n"
-        "/signals — recent signals\n"
-        "/top — top liquid symbols\n"
+        "/status — стан системи\n"
+        "/scan — запустити сканування\n"
+        "/signals — останні сигнали\n"
+        "/active — активні сигнали\n"
+        "/stats — статистика результатів\n"
+        "/market — огляд ринку\n"
+        "/top — найкращі сигнали\n"
         "/btc — analyse BTC\n"
         "/eth — analyse ETH\n"
         "/coin SYMBOL — analyse any symbol\n"

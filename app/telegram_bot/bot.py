@@ -40,6 +40,8 @@ class BotContext:
         default=lambda symbol: EngineResult(None, "Analysis service unavailable")
     )
     recent_signals: Callable[[], list[dict]] = field(default=list)
+    active_signals: Callable[[], list[dict]] = field(default=list)
+    market_overview: Callable[[], dict] = field(default=dict)
     get_stats: Callable[[], dict] = field(default=dict)
     get_top_symbols: Callable[[], list[str]] = field(default=list)
     set_watchlist: Callable[[list[str]], None] = field(default=lambda symbols: None)
@@ -88,10 +90,44 @@ def create_dispatcher(context: BotContext) -> Dispatcher:
             )
         await message.answer("\n".join(lines))
 
+    @dp.message(Command("active"))
+    async def active_handler(message: Message) -> None:
+        active = await _resolve(context.active_signals())
+        if not active:
+            await message.answer("Немає активних сигналів.")
+            return
+        lines = ["🟢 АКТИВНІ СИГНАЛИ"]
+        for item in active:
+            lines.append(
+                f"{item.get('symbol', '?')} {item.get('direction', '?')} | {item.get('status', 'ACTIVE')} "
+                f"| entry={item.get('entry', 0)} | ID={item.get('signal_id', '?')}"
+            )
+        await message.answer("\n".join(lines))
+
+    @dp.message(Command("market"))
+    async def market_handler(message: Message) -> None:
+        overview = await _resolve(context.market_overview())
+        lines = ["🌍 ОГЛЯД РИНКУ"]
+        for symbol, info in (overview or {}).items():
+            lines.append(
+                f"{symbol}: {info.get('trend', 'n/a')} | RSI14={info.get('rsi14', 'n/a')} "
+                f"| score={info.get('score', 'n/a')}"
+            )
+        await message.answer("\n".join(lines) if overview else "Ринкові дані поки недоступні.")
+
     @dp.message(Command("top"))
     async def top_handler(message: Message) -> None:
-        symbols = await _resolve(context.get_top_symbols())
-        await message.answer("🏆 Top liquid symbols:\n" + (", ".join(symbols) if symbols else "unavailable"))
+        records = await _resolve(context.recent_signals())
+        best = sorted(records, key=lambda r: float(r.get("score", 0)), reverse=True)[:5]
+        if not best:
+            await message.answer("Немає даних про сигнали.")
+            return
+        lines = ["🏆 НАЙКРАЩІ СИГНАЛИ"]
+        lines.extend(
+            f"{r.get('symbol', '?')} {r.get('direction', '?')} | Score {r.get('score', 0)} | {r.get('status', '?')}"
+            for r in best
+        )
+        await message.answer("\n".join(lines))
 
     @dp.message(Command("btc", "eth"))
     async def quick_coin_handler(message: Message) -> None:
@@ -144,6 +180,7 @@ def create_dispatcher(context: BotContext) -> Dispatcher:
             f"Leverage: {s.leverage}x\n"
             f"Min RR: {s.min_risk_reward}\n"
             f"Min score: {s.min_signal_score}\n"
+            f"Signal-only: {s.signal_only}\n"
             f"Paper trading: {s.paper_trading}\n"
             f"Scan interval: {s.scan_interval_seconds}s"
         )

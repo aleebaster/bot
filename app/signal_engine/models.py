@@ -87,6 +87,7 @@ class Signal:
     confirmation_status: str = ""
     false_signal_risk: int = 0
     countertrend: bool = False
+    current_price: float = 0.0
 
     @property
     def entry(self) -> float:

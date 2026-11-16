@@ -114,10 +114,10 @@ def test_telegram_shows_entry_quality_and_rejection_detail() -> None:
         confirmation_status=verdict.verdict.value,
     )
     text = format_signal(signal)
-    assert "🧠 ENTRY QUALITY" in text
-    assert "Confirmation Score: 92.0/100" in text
+    assert "📊 ЯКІСТЬ СИГНАЛУ" in text
+    assert "Confirmation Score: 92/100" in text
     assert "False Signal Risk: 12/100" in text
-    assert "Decision: WAIT FOR CONFIRMATION" in text
+    assert "Рішення: WAIT FOR CONFIRMATION" in text
 
     rejected = make_verdict(EntryVerdict.FALSE_BREAKOUT, 60, 78)
     rejected.reasons_reject = ["False breakout detected.", "RSI momentum disagreement."]
