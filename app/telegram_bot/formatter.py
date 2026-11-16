@@ -173,6 +173,11 @@ def format_stats(stats: dict) -> str:
         f"Rejected ideas: {stats.get('total_rejections', 0)}",
         f"False breakout rate: {stats.get('false_breakout_rate', 0):.1f}%",
         f"Liquidity trap rate: {stats.get('liquidity_trap_rate', 0):.1f}%",
+        f"TP1 / TP2 / TP3: {stats.get('tp1_rate', 0):.1f}% / {stats.get('tp2_rate', 0):.1f}% / {stats.get('tp3_rate', 0):.1f}%",
+        f"SL rate: {stats.get('sl_rate', 0):.1f}%",
+        f"Average RR: 1:{stats.get('average_risk_reward', 0):.2f}",
+        f"LONG / SHORT: {stats.get('by_direction', {}).get('LONG', {}).get('signals', 0)} / "
+        f"{stats.get('by_direction', {}).get('SHORT', {}).get('signals', 0)}",
         "By entry status:",
     ]
     for status, data in (stats.get("by_confirmation_status") or {}).items():
@@ -180,4 +185,6 @@ def format_stats(stats: dict) -> str:
             f"  {status}: {data.get('signals', 0)} signals, WR {data.get('win_rate', 0):.1f}%, "
             f"expectancy {data.get('expectancy_r', 0):.2f}R"
         )
+    lines.append("")
+    lines.append("⚠️ Симуляція на закритих свічках: комісії, slippage та funding враховані. Реального виконання немає.")
     return "\n".join(lines)

@@ -270,6 +270,8 @@ class ConfirmationVerdict:
             "countertrend": self.countertrend,
             "breakout_verdict": self.breakout.verdict.value,
             "trap_strength": round(self.trap.strength, 3),
+            "market_regime": self.details.get("market_regime", "unknown"),
+            "volatility_regime": self.details.get("volatility_regime", "unknown"),
             "details": dict(self.details),
         }
 

@@ -67,6 +67,8 @@ class SignalRepository:
             rejection_reasons=json.dumps((signal.confirmation or {}).get("reasons_reject", [])),
             entry_location=(signal.confirmation or {}).get("entry_location", ""),
             countertrend=int(signal.countertrend),
+            market_regime=(signal.confirmation or {}).get("market_regime", "unknown"),
+            volatility_regime=(signal.confirmation or {}).get("volatility_regime", "unknown"),
             tracking_open=1,
             outcome="OPEN",
             created_at=now,

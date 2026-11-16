@@ -55,6 +55,8 @@ class SignalRecord(Base):
     rejection_reasons: Mapped[str] = mapped_column(Text, default="[]")
     entry_location: Mapped[str] = mapped_column(String(32), default="")
     countertrend: Mapped[bool] = mapped_column(Integer, default=0)
+    market_regime: Mapped[str] = mapped_column(String(20), default="unknown")
+    volatility_regime: Mapped[str] = mapped_column(String(20), default="unknown")
     recheck_status: Mapped[str] = mapped_column(String(32), default="")
     tracking_open: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[int] = mapped_column(Integer, default=0)

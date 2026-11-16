@@ -102,6 +102,23 @@ def compute_statistics(records: list[SignalRecord], rejections: list | None = No
         "by_timeframe": _group_stats(closed, "setup_timeframe"),
         "by_trigger_timeframe": _group_stats(closed, "trigger_timeframe"),
         "by_confirmation_status": _group_stats(closed, "confirmation_status"),
+        "by_regime": _group_stats(closed, "market_regime"),
+        "by_volatility_regime": _group_stats(closed, "volatility_regime"),
+        "tp1_rate": round(100 * sum(1 for r in closed if r.highest_tp >= 1) / len(closed), 2) if closed else 0.0,
+        "tp2_rate": round(100 * sum(1 for r in closed if r.highest_tp >= 2) / len(closed), 2) if closed else 0.0,
+        "tp3_rate": round(100 * sum(1 for r in closed if r.highest_tp >= 3) / len(closed), 2) if closed else 0.0,
+        "sl_rate": round(100 * sum(1 for r in closed if r.outcome == "SL") / len(closed), 2) if closed else 0.0,
+        "average_risk_reward": round(sum(r.risk_reward for r in closed) / len(closed), 2) if closed else 0.0,
+        "false_signal_engine": {
+            "rejections": len(rejections or []),
+            "rejection_rate": round(
+                100 * len(rejections or []) / max(1, len(closed) + len(rejections or [])), 2
+            ),
+            "by_verdict": {
+                verdict: sum(1 for r in (rejections or []) if r.verdict == verdict)
+                for verdict in sorted({r.verdict for r in (rejections or [])})
+            },
+        },
         "countertrend": _summary([r for r in closed if r.countertrend]),
         "by_false_signal_risk": {
             band: _summary([r for r in closed if _risk_band(r.false_signal_risk) == band])

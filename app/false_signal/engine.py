@@ -183,7 +183,19 @@ class FalseSignalEngine:
             else "BEARISH" if ema21 and ema200 and close15 < ema21 < ema200
             else "MIXED"
         )
+        atr_pct = (setup_ind.last("atr14") or 0.0) / close15 if close15 else 0.0
+        atr_series = setup_ind.atr14 / setup["close"].astype(float)
+        low_q = atr_series.rolling(200, min_periods=50).quantile(0.33).iloc[-1]
+        high_q = atr_series.rolling(200, min_periods=50).quantile(0.66).iloc[-1]
+        volatility_regime = (
+            "high" if pd.notna(high_q) and atr_pct > high_q
+            else "low" if pd.notna(low_q) and atr_pct < low_q else "normal"
+        )
+        h4_dir = mtf.directions.get("4h", "RANGING")
+        market_regime = "bull" if h4_dir == "BULLISH" else "bear" if h4_dir == "BEARISH" else "sideways"
         details = {
+            "market_regime": market_regime,
+            "volatility_regime": volatility_regime,
             "trend": f"{mtf.alignment.value} | {mtf.detail}",
             "ema": f"{ema_alignment} (EMA21={ema21}, EMA200={ema200})" if ema21 and ema200 else "n/a",
             "rsi": f"RSI14={rsi.score:.1f}/15, {rsi.detail}",
